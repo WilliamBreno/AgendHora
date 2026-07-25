@@ -1,1 +1,10 @@
 .env
+
+# Build
+/backend
+/backend.exe
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
