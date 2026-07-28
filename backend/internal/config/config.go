@@ -3,15 +3,17 @@ package config
 import (
 	"log"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	DatabaseURL  string
-	Port         string
-	ResendAPIKey string
-	ResendFrom   string
+	DatabaseURL    string
+	Port           string
+	ResendAPIKey   string
+	ResendFrom     string
+	AllowedOrigins []string
 }
 
 // Load lê o .env (se existir) e as variáveis de ambiente do processo.
@@ -32,13 +34,21 @@ func Load() Config {
 
 	resendFrom := os.Getenv("RESEND_FROM")
 	if resendFrom == "" {
-		resendFrom = "Agendamento <onboarding@resend.dev>"
+		resendFrom = "AgendHora <onboarding@resend.dev>"
+	}
+
+	var origensExtras []string
+	for _, o := range strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			origensExtras = append(origensExtras, o)
+		}
 	}
 
 	return Config{
-		DatabaseURL:  dbURL,
-		Port:         port,
-		ResendAPIKey: os.Getenv("RESEND_API_KEY"),
-		ResendFrom:   resendFrom,
+		DatabaseURL:    dbURL,
+		Port:           port,
+		ResendAPIKey:   os.Getenv("RESEND_API_KEY"),
+		ResendFrom:     resendFrom,
+		AllowedOrigins: origensExtras,
 	}
 }
