@@ -18,7 +18,7 @@ export function CalendarioMensal({
   onAgendamentoClick,
 }: CalendarioMensalProps) {
   return (
-    <div className="overflow-hidden rounded-xl border border-border">
+    <div className="min-w-[640px] overflow-hidden rounded-xl border border-border">
       <div className="grid grid-cols-[2.25rem_repeat(7,1fr)] border-b border-border bg-muted/40">
         <div />
         {DIAS_SEMANA_PT.map((dia) => (

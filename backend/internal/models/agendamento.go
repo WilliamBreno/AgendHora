@@ -17,12 +17,16 @@ const (
 
 // Agendamento é um horário reservado por um cliente final para um serviço.
 type Agendamento struct {
-	ID              uint      `gorm:"primaryKey" json:"id"`
-	ClienteNome     string    `gorm:"not null" json:"cliente_nome"`
-	ClienteTelefone string    `gorm:"not null" json:"cliente_telefone"`
-	ServicoID       uint      `gorm:"not null;index" json:"servico_id"`
-	Servico         Servico   `json:"servico,omitempty"`
-	Data            time.Time `gorm:"type:date;not null;index" json:"data"`
+	ID              uint   `gorm:"primaryKey" json:"id"`
+	ClienteNome     string `gorm:"not null" json:"cliente_nome"`
+	ClienteTelefone string `gorm:"not null" json:"cliente_telefone"`
+	// ClienteEmail é opcional — sem ele não há como mandar o e-mail de
+	// confirmação pro cliente, mas o agendamento continua válido normalmente
+	// (a notificação pro dono não depende disso).
+	ClienteEmail string    `json:"cliente_email"`
+	ServicoID    uint      `gorm:"not null;index" json:"servico_id"`
+	Servico      Servico   `json:"servico,omitempty"`
+	Data         time.Time `gorm:"type:date;not null;index" json:"data"`
 	// Hora fica no formato "HH:MM" (24h) para evitar problemas de fuso horário.
 	Hora        string            `gorm:"not null" json:"hora"`
 	Status      StatusAgendamento `gorm:"type:varchar(20);not null;default:confirmado;index" json:"status"`

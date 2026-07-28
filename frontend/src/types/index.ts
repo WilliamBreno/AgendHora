@@ -38,6 +38,7 @@ export interface Agendamento {
   id: number
   cliente_nome: string
   cliente_telefone: string
+  cliente_email: string
   servico_id: number
   servico: Servico
   data: string // "YYYY-MM-DD"
@@ -53,6 +54,7 @@ export interface Agendamento {
 export interface AgendamentoInput {
   cliente_nome: string
   cliente_telefone: string
+  cliente_email?: string
   servico_id: number
   data: string
   hora: string
@@ -60,13 +62,42 @@ export interface AgendamentoInput {
   encaixe?: boolean
 }
 
+// Chaves sem acento — precisam bater com models.DiasSemana no backend.
+export const DIAS_SEMANA = [
+  "domingo",
+  "segunda",
+  "terca",
+  "quarta",
+  "quinta",
+  "sexta",
+  "sabado",
+] as const
+
+export type DiaSemana = (typeof DIAS_SEMANA)[number]
+
+export interface HorarioDia {
+  abre: string
+  fecha: string
+  fechado: boolean
+}
+
+export type HorarioFuncionamento = Partial<Record<DiaSemana, HorarioDia>>
+
 export interface Estabelecimento {
   id: number
   nome: string
   telefone: string
   endereco: string
-  horario_funcionamento: Record<string, unknown>
+  email: string
+  horario_funcionamento: HorarioFuncionamento
   icones_padrao: string[]
   created_at: string
   updated_at: string
+}
+
+export interface EstabelecimentoDadosInput {
+  nome: string
+  telefone: string
+  endereco: string
+  email: string
 }

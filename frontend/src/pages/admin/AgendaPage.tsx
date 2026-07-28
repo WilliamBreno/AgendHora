@@ -77,7 +77,7 @@ export function AgendaPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-heading text-2xl font-semibold">{formatarMesAno(ano, mes)}</h1>
           {ehMesAtual(ano, mes) && (
@@ -94,7 +94,7 @@ export function AgendaPage() {
           <Button variant="outline" size="icon-sm" onClick={irParaProximoMes}>
             <ChevronRight className="size-4" />
           </Button>
-          <Button onClick={() => setNovoAberto(true)}>
+          <Button onClick={() => setNovoAberto(true)} className="ml-auto sm:ml-0">
             <Plus className="size-4" />
             Novo agendamento
           </Button>
@@ -104,11 +104,13 @@ export function AgendaPage() {
       {loading ? (
         <p className="text-sm text-muted-foreground">Carregando...</p>
       ) : (
-        <CalendarioMensal
-          semanas={semanas}
-          agendamentosPorDia={agendamentosPorDia}
-          onAgendamentoClick={setAgendamentoSelecionado}
-        />
+        <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          <CalendarioMensal
+            semanas={semanas}
+            agendamentosPorDia={agendamentosPorDia}
+            onAgendamentoClick={setAgendamentoSelecionado}
+          />
+        </div>
       )}
 
       <AgendamentoDetailPanel

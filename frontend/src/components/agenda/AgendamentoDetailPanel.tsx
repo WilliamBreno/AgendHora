@@ -11,26 +11,13 @@ import { Button } from "@/components/ui/button"
 import { DynamicIcon } from "@/lib/icons"
 import { CORES_SERVICO_CLASSES } from "@/lib/cores"
 import { cn } from "@/lib/utils"
+import { formatarDataExibicao, formatarPreco } from "@/lib/formatacao"
 import type { Agendamento, StatusAgendamento } from "@/types"
 
 interface AgendamentoDetailPanelProps {
   agendamento: Agendamento | null
   onOpenChange: (open: boolean) => void
   onCancelar: (id: number) => Promise<void>
-}
-
-function formatarPreco(preco: number) {
-  return preco.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-}
-
-function formatarDataExibicao(data: string) {
-  const [ano, mes, dia] = data.split("-").map(Number)
-  const texto = new Date(ano, mes - 1, dia).toLocaleDateString("pt-BR", {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-  })
-  return texto.charAt(0).toUpperCase() + texto.slice(1)
 }
 
 const STATUS_LABEL: Record<StatusAgendamento, string> = {

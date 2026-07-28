@@ -8,8 +8,10 @@ import (
 )
 
 type Config struct {
-	DatabaseURL string
-	Port        string
+	DatabaseURL  string
+	Port         string
+	ResendAPIKey string
+	ResendFrom   string
 }
 
 // Load lê o .env (se existir) e as variáveis de ambiente do processo.
@@ -28,5 +30,15 @@ func Load() Config {
 		port = "8080"
 	}
 
-	return Config{DatabaseURL: dbURL, Port: port}
+	resendFrom := os.Getenv("RESEND_FROM")
+	if resendFrom == "" {
+		resendFrom = "Agendamento <onboarding@resend.dev>"
+	}
+
+	return Config{
+		DatabaseURL:  dbURL,
+		Port:         port,
+		ResendAPIKey: os.Getenv("RESEND_API_KEY"),
+		ResendFrom:   resendFrom,
+	}
 }

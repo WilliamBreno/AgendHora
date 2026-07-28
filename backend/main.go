@@ -6,6 +6,7 @@ import (
 	"agendamento/backend/internal/api"
 	"agendamento/backend/internal/config"
 	"agendamento/backend/internal/database"
+	"agendamento/backend/internal/notifications"
 )
 
 func main() {
@@ -15,7 +16,9 @@ func main() {
 	database.Migrate(db)
 	estabelecimentoID := database.EnsureEstabelecimentoPadrao(db)
 
-	router := api.NewRouter(db, estabelecimentoID)
+	notificador := notifications.New(cfg.ResendAPIKey, cfg.ResendFrom)
+
+	router := api.NewRouter(db, estabelecimentoID, notificador)
 
 	log.Printf("servidor rodando na porta %s", cfg.Port)
 	if err := router.Run(":" + cfg.Port); err != nil {

@@ -2,6 +2,7 @@ import { MoreVertical, Pencil, Trash2 } from "lucide-react"
 import { DynamicIcon } from "@/lib/icons"
 import { CORES_SERVICO_CLASSES } from "@/lib/cores"
 import { cn } from "@/lib/utils"
+import { formatarDuracao, formatarPreco } from "@/lib/formatacao"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -15,17 +16,6 @@ interface ServicoCardProps {
   servico: Servico
   onEdit: () => void
   onDelete: () => void
-}
-
-function formatarPreco(preco: number) {
-  return preco.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-}
-
-function formatarDuracao(min: number) {
-  if (min < 60) return `${min} min`
-  const horas = Math.floor(min / 60)
-  const resto = min % 60
-  return resto === 0 ? `${horas}h` : `${horas}h${resto}min`
 }
 
 export function ServicoCard({ servico, onEdit, onDelete }: ServicoCardProps) {

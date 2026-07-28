@@ -1,8 +1,8 @@
-# CLAUDE.md — Sistema de Agendamento
+# CLAUDE.md — AgendHora
 
 ## Visão geral
 
-Sistema de agendamento (booking) simples para estabelecimentos de serviço (ex: salão, barbearia, clínica de estética, studio). Dois lados:
+**AgendHora** ("Agendou. Pronto.") é um sistema de agendamento (booking) simples para estabelecimentos de serviço (ex: salão, barbearia, clínica de estética, studio). Dois lados:
 
 - **Página pública**: o cliente final escolhe um serviço, vê horários disponíveis e agenda — sem precisar de login.
 - **Área administrativa** (autenticada): o dono do estabelecimento vê todos os agendamentos numa agenda mensal, cadastra os serviços que oferece e recebe notificação de cada novo agendamento.

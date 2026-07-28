@@ -24,6 +24,8 @@ type Estabelecimento struct {
 	Nome     string `gorm:"not null" json:"nome"`
 	Telefone string `json:"telefone"`
 	Endereco string `json:"endereco"`
+	// Email recebe a notificação de "novo agendamento" (ver internal/notifications).
+	Email string `json:"email"`
 
 	// HorarioFuncionamento guarda o horário de funcionamento por dia da semana, ex:
 	// {"segunda": {"abre": "09:00", "fecha": "18:00", "fechado": false}, ...}

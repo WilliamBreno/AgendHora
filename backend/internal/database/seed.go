@@ -24,15 +24,31 @@ func EnsureEstabelecimentoPadrao(db *gorm.DB) uint {
 	}
 
 	icones, _ := json.Marshal(models.IconesPadraoDefault)
+	horario, _ := json.Marshal(horarioFuncionamentoDefault())
 
 	estabelecimento = models.Estabelecimento{
 		Nome:                 "Meu Estabelecimento",
 		IconesPadrao:         datatypes.JSON(icones),
-		HorarioFuncionamento: datatypes.JSON(`{}`),
+		HorarioFuncionamento: datatypes.JSON(horario),
 	}
 	if err := db.Create(&estabelecimento).Error; err != nil {
 		log.Fatalf("erro ao criar estabelecimento padrão: %v", err)
 	}
 
 	return estabelecimento.ID
+}
+
+// horarioFuncionamentoDefault é um horário comercial razoável (seg-sáb,
+// 09:00-18:00, domingo fechado) usado só na primeira criação do
+// estabelecimento — o dono ajusta em Configurações depois.
+func horarioFuncionamentoDefault() models.HorarioFuncionamento {
+	horario := models.HorarioFuncionamento{}
+	for _, dia := range models.DiasSemana {
+		if dia == "domingo" {
+			horario[dia] = models.HorarioDia{Fechado: true}
+			continue
+		}
+		horario[dia] = models.HorarioDia{Abre: "09:00", Fecha: "18:00"}
+	}
+	return horario
 }

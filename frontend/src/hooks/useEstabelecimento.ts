@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { api, ApiError } from "@/lib/api"
-import type { Estabelecimento } from "@/types"
+import type { Estabelecimento, EstabelecimentoDadosInput, HorarioFuncionamento } from "@/types"
 
 export function useEstabelecimento() {
   const [estabelecimento, setEstabelecimento] = useState<Estabelecimento | null>(null)
@@ -33,5 +33,29 @@ export function useEstabelecimento() {
     return resposta.icones_padrao
   }
 
-  return { estabelecimento, loading, atualizarIcones, recarregar: carregar }
+  async function atualizarDados(dados: EstabelecimentoDadosInput) {
+    const atualizado = await api.put<Estabelecimento>("/api/estabelecimento", dados)
+    setEstabelecimento(atualizado)
+    return atualizado
+  }
+
+  async function atualizarHorario(horarios: HorarioFuncionamento) {
+    const resposta = await api.put<{ horario_funcionamento: HorarioFuncionamento }>(
+      "/api/estabelecimento/horario",
+      { horarios }
+    )
+    setEstabelecimento((atual) =>
+      atual ? { ...atual, horario_funcionamento: resposta.horario_funcionamento } : atual
+    )
+    return resposta.horario_funcionamento
+  }
+
+  return {
+    estabelecimento,
+    loading,
+    atualizarIcones,
+    atualizarDados,
+    atualizarHorario,
+    recarregar: carregar,
+  }
 }

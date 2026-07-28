@@ -10,20 +10,23 @@ import (
 	"gorm.io/gorm"
 
 	"agendamento/backend/internal/models"
+	"agendamento/backend/internal/notifications"
 )
 
 type AgendamentoHandler struct {
 	DB                *gorm.DB
 	EstabelecimentoID uint
+	Notificador       *notifications.Notificador
 }
 
-func NewAgendamentoHandler(db *gorm.DB, estabelecimentoID uint) *AgendamentoHandler {
-	return &AgendamentoHandler{DB: db, EstabelecimentoID: estabelecimentoID}
+func NewAgendamentoHandler(db *gorm.DB, estabelecimentoID uint, notificador *notifications.Notificador) *AgendamentoHandler {
+	return &AgendamentoHandler{DB: db, EstabelecimentoID: estabelecimentoID, Notificador: notificador}
 }
 
 type agendamentoInput struct {
 	ClienteNome     string `json:"cliente_nome" binding:"required"`
 	ClienteTelefone string `json:"cliente_telefone" binding:"required"`
+	ClienteEmail    string `json:"cliente_email"`
 	ServicoID       uint   `json:"servico_id" binding:"required"`
 	Data            string `json:"data" binding:"required"` // "2006-01-02"
 	Hora            string `json:"hora" binding:"required"` // "15:04"
@@ -40,6 +43,7 @@ type agendamentoResponse struct {
 	ID                uint                     `json:"id"`
 	ClienteNome       string                   `json:"cliente_nome"`
 	ClienteTelefone   string                   `json:"cliente_telefone"`
+	ClienteEmail      string                   `json:"cliente_email"`
 	ServicoID         uint                     `json:"servico_id"`
 	Servico           models.Servico           `json:"servico"`
 	Data              string                   `json:"data"`
@@ -57,6 +61,7 @@ func toAgendamentoResponse(a models.Agendamento) agendamentoResponse {
 		ID:                a.ID,
 		ClienteNome:       a.ClienteNome,
 		ClienteTelefone:   a.ClienteTelefone,
+		ClienteEmail:      a.ClienteEmail,
 		ServicoID:         a.ServicoID,
 		Servico:           a.Servico,
 		Data:              a.Data.Format("2006-01-02"),
@@ -78,10 +83,46 @@ func minutosDoDia(hora string) (int, error) {
 	return t.Hour()*60 + t.Minute(), nil
 }
 
+type intervaloOcupado struct {
+	inicio int
+	fim    int
+}
+
+func sobrepoe(aInicio, aFim, bInicio, bFim int) bool {
+	return aInicio < bFim && bInicio < aFim
+}
+
+// intervalosOcupados lista, em minutos desde 00:00, os horários já tomados
+// por agendamentos confirmados do estabelecimento naquele dia. ignorarID
+// exclui o próprio registro (útil ao reagendar). Função livre (não presa a
+// AgendamentoHandler) porque o motor de disponibilidade também precisa dela.
+func intervalosOcupados(db *gorm.DB, estabelecimentoID uint, data time.Time, ignorarID uint) ([]intervaloOcupado, error) {
+	query := db.Preload("Servico").
+		Where("estabelecimento_id = ? AND data = ? AND status = ?", estabelecimentoID, data, models.StatusConfirmado)
+	if ignorarID != 0 {
+		query = query.Where("id <> ?", ignorarID)
+	}
+
+	var existentes []models.Agendamento
+	if err := query.Find(&existentes).Error; err != nil {
+		return nil, err
+	}
+
+	intervalos := make([]intervaloOcupado, 0, len(existentes))
+	for _, ag := range existentes {
+		inicio, err := minutosDoDia(ag.Hora)
+		if err != nil {
+			continue
+		}
+		intervalos = append(intervalos, intervaloOcupado{inicio: inicio, fim: inicio + ag.Servico.DuracaoMin})
+	}
+	return intervalos, nil
+}
+
 // haConflito verifica se [hora, hora+duracaoMin) esbarra em algum agendamento
-// confirmado já existente naquele dia. ignorarID exclui o próprio registro
-// (útil ao reagendar). A checagem é por estabelecimento inteiro, não por
-// serviço: a v1 assume um único profissional/recurso atendendo por vez.
+// confirmado já existente naquele dia. A checagem é por estabelecimento
+// inteiro, não por serviço: a v1 assume um único profissional/recurso
+// atendendo por vez.
 func (h *AgendamentoHandler) haConflito(data time.Time, hora string, duracaoMin int, ignorarID uint) (bool, error) {
 	inicio, err := minutosDoDia(hora)
 	if err != nil {
@@ -89,24 +130,12 @@ func (h *AgendamentoHandler) haConflito(data time.Time, hora string, duracaoMin 
 	}
 	fim := inicio + duracaoMin
 
-	query := h.DB.Preload("Servico").
-		Where("estabelecimento_id = ? AND data = ? AND status = ?", h.EstabelecimentoID, data, models.StatusConfirmado)
-	if ignorarID != 0 {
-		query = query.Where("id <> ?", ignorarID)
-	}
-
-	var existentes []models.Agendamento
-	if err := query.Find(&existentes).Error; err != nil {
+	ocupados, err := intervalosOcupados(h.DB, h.EstabelecimentoID, data, ignorarID)
+	if err != nil {
 		return false, err
 	}
-
-	for _, ag := range existentes {
-		agInicio, err := minutosDoDia(ag.Hora)
-		if err != nil {
-			continue
-		}
-		agFim := agInicio + ag.Servico.DuracaoMin
-		if inicio < agFim && agInicio < fim {
+	for _, o := range ocupados {
+		if sobrepoe(inicio, fim, o.inicio, o.fim) {
 			return true, nil
 		}
 	}
@@ -188,6 +217,7 @@ func (h *AgendamentoHandler) Create(c *gin.Context) {
 	agendamento := models.Agendamento{
 		ClienteNome:       strings.TrimSpace(input.ClienteNome),
 		ClienteTelefone:   strings.TrimSpace(input.ClienteTelefone),
+		ClienteEmail:      strings.TrimSpace(input.ClienteEmail),
 		ServicoID:         input.ServicoID,
 		Data:              data,
 		Hora:              input.Hora,
@@ -201,6 +231,13 @@ func (h *AgendamentoHandler) Create(c *gin.Context) {
 		return
 	}
 	agendamento.Servico = servico
+
+	if h.Notificador != nil {
+		var estabelecimento models.Estabelecimento
+		if err := h.DB.First(&estabelecimento, h.EstabelecimentoID).Error; err == nil {
+			go h.Notificador.NotificarNovoAgendamento(estabelecimento, agendamento)
+		}
+	}
 
 	c.JSON(http.StatusCreated, toAgendamentoResponse(agendamento))
 }
@@ -251,6 +288,13 @@ func (h *AgendamentoHandler) Cancelar(c *gin.Context) {
 			return
 		}
 		agendamento.Status = models.StatusCancelado
+
+		if h.Notificador != nil {
+			var estabelecimento models.Estabelecimento
+			if err := h.DB.First(&estabelecimento, h.EstabelecimentoID).Error; err == nil {
+				go h.Notificador.NotificarCancelamento(estabelecimento, *agendamento)
+			}
+		}
 	}
 
 	c.JSON(http.StatusOK, toAgendamentoResponse(*agendamento))
