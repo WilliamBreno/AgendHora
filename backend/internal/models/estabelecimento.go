@@ -17,8 +17,8 @@ var IconesPadraoDefault = []string{
 	"Flame", "Leaf", "Smile", "ShowerHead",
 }
 
-// Estabelecimento representa o negócio dono da agenda (v1 é mono-estabelecimento,
-// mas o registro fica separado para não travar uma evolução futura para multi-tenant).
+// Estabelecimento representa uma empresa cadastrada na plataforma (multi-tenant:
+// cada uma tem seus próprios usuários, serviços e agendamentos).
 type Estabelecimento struct {
 	ID       uint   `gorm:"primaryKey" json:"id"`
 	Nome     string `gorm:"not null" json:"nome"`
@@ -26,6 +26,19 @@ type Estabelecimento struct {
 	Endereco string `json:"endereco"`
 	// Email recebe a notificação de "novo agendamento" (ver internal/notifications).
 	Email string `json:"email"`
+
+	// Slug identifica a empresa na URL pública (ex: agendhora.app/salao-da-maria).
+	// Gerado a partir do nome no cadastro, único, nunca muda depois de criado.
+	// Sem "not null" no banco de propósito: isso permite ADD COLUMN em cima de
+	// linhas existentes sem quebrar a migration; a obrigatoriedade é garantida
+	// na aplicação (handlers.Registro sempre define um slug, e MigrarSlugsLegados
+	// preenche qualquer linha antiga que não tinha esse campo).
+	Slug string `gorm:"uniqueIndex" json:"slug"`
+
+	// Logo é a imagem da empresa como data URI base64 (ex: "data:image/png;base64,...").
+	// Guardada direto no banco por simplicidade — a v1 não precisa de um serviço
+	// de armazenamento de arquivos à parte pra logos, que são pequenas.
+	Logo string `json:"logo"`
 
 	// HorarioFuncionamento guarda o horário de funcionamento por dia da semana, ex:
 	// {"segunda": {"abre": "09:00", "fecha": "18:00", "fechado": false}, ...}

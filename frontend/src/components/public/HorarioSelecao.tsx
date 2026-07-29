@@ -1,10 +1,11 @@
 import { useDisponibilidade } from "@/hooks/useDisponibilidade"
-import { Input } from "@/components/ui/input"
+import { DatePickerPopover } from "@/components/public/DatePickerPopover"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import type { Servico } from "@/types"
 
 interface HorarioSelecaoProps {
+  slug: string
   servico: Servico
   data: string
   hora: string
@@ -12,31 +13,24 @@ interface HorarioSelecaoProps {
   onHoraChange: (hora: string) => void
 }
 
-function hojeISO() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-}
-
 export function HorarioSelecao({
+  slug,
   servico,
   data,
   hora,
   onDataChange,
   onHoraChange,
 }: HorarioSelecaoProps) {
-  const { horarios, loading } = useDisponibilidade(servico.id, data)
+  const { horarios, loading } = useDisponibilidade(slug, servico.id, data)
 
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-1.5">
-        <Label htmlFor="data-agendamento">Data</Label>
-        <Input
-          id="data-agendamento"
-          type="date"
-          min={hojeISO()}
+        <Label>Data</Label>
+        <DatePickerPopover
           value={data}
-          onChange={(e) => {
-            onDataChange(e.target.value)
+          onChange={(novaData) => {
+            onDataChange(novaData)
             onHoraChange("")
           }}
         />

@@ -14,11 +14,11 @@ func main() {
 
 	db := database.Connect(cfg.DatabaseURL)
 	database.Migrate(db)
-	estabelecimentoID := database.EnsureEstabelecimentoPadrao(db)
+	database.MigrarSlugsLegados(db)
 
 	notificador := notifications.New(cfg.ResendAPIKey, cfg.ResendFrom)
 
-	router := api.NewRouter(db, estabelecimentoID, notificador, cfg.AllowedOrigins)
+	router := api.NewRouter(db, cfg.JWTSecret, notificador, cfg.AllowedOrigins)
 
 	log.Printf("servidor rodando na porta %s", cfg.Port)
 	if err := router.Run(":" + cfg.Port); err != nil {

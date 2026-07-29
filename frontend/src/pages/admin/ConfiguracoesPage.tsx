@@ -1,11 +1,28 @@
+import { Copy } from "lucide-react"
+import { toast } from "sonner"
 import { useEstabelecimento } from "@/hooks/useEstabelecimento"
 import { IconesPadraoManager } from "@/components/configuracoes/IconesPadraoManager"
 import { DadosEstabelecimentoForm } from "@/components/configuracoes/DadosEstabelecimentoForm"
 import { HorarioFuncionamentoEditor } from "@/components/configuracoes/HorarioFuncionamentoEditor"
+import { LogoUploadField } from "@/components/configuracoes/LogoUploadField"
+import { Button } from "@/components/ui/button"
 
 export function ConfiguracoesPage() {
-  const { estabelecimento, loading, atualizarIcones, atualizarDados, atualizarHorario } =
-    useEstabelecimento()
+  const {
+    estabelecimento,
+    loading,
+    atualizarIcones,
+    atualizarDados,
+    atualizarHorario,
+    atualizarLogo,
+  } = useEstabelecimento()
+
+  const linkPublico = estabelecimento ? `${window.location.origin}/${estabelecimento.slug}` : ""
+
+  function copiarLink() {
+    navigator.clipboard.writeText(linkPublico)
+    toast.success("Link copiado.")
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -13,6 +30,30 @@ export function ConfiguracoesPage() {
         <h1 className="font-heading text-2xl font-semibold">Configurações</h1>
         <p className="text-sm text-muted-foreground">Preferências gerais do estabelecimento.</p>
       </div>
+
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="font-heading font-medium">Página pública</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          O link que você compartilha com os clientes pra eles agendarem.
+        </p>
+        <div className="mt-4 flex flex-col gap-4">
+          {loading || !estabelecimento ? (
+            <p className="text-sm text-muted-foreground">Carregando...</p>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 truncate rounded-lg border border-border bg-muted px-3 py-2 text-sm">
+                  {linkPublico}
+                </code>
+                <Button type="button" variant="outline" size="icon-sm" onClick={copiarLink}>
+                  <Copy className="size-4" />
+                </Button>
+              </div>
+              <LogoUploadField logo={estabelecimento.logo} onAtualizar={atualizarLogo} />
+            </>
+          )}
+        </div>
+      </section>
 
       <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="font-heading font-medium">Dados do estabelecimento</h2>
@@ -23,7 +64,10 @@ export function ConfiguracoesPage() {
           {loading || !estabelecimento ? (
             <p className="text-sm text-muted-foreground">Carregando...</p>
           ) : (
-            <DadosEstabelecimentoForm estabelecimento={estabelecimento} onAtualizar={atualizarDados} />
+            <DadosEstabelecimentoForm
+              estabelecimento={estabelecimento}
+              onAtualizar={atualizarDados}
+            />
           )}
         </div>
       </section>

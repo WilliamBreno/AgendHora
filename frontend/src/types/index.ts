@@ -89,6 +89,8 @@ export interface Estabelecimento {
   telefone: string
   endereco: string
   email: string
+  slug: string
+  logo: string
   horario_funcionamento: HorarioFuncionamento
   icones_padrao: string[]
   created_at: string
@@ -100,4 +102,13 @@ export interface EstabelecimentoDadosInput {
   telefone: string
   endereco: string
   email: string
+}
+
+// O que a página pública recebe — sem e-mail nem outros dados internos do dono.
+export interface EstabelecimentoPublico {
+  nome: string
+  slug: string
+  logo: string
+  telefone: string
+  endereco: string
 }

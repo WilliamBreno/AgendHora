@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { api, ApiError } from "@/lib/api"
+import { apiAdmin, ApiError } from "@/lib/api"
 import type { Servico, ServicoInput } from "@/types"
 
 function ordenarPorNome(servicos: Servico[]) {
@@ -14,7 +14,7 @@ export function useServicos() {
   const carregar = useCallback(async () => {
     setLoading(true)
     try {
-      const dados = await api.get<Servico[]>("/api/servicos")
+      const dados = await apiAdmin.get<Servico[]>("/servicos")
       setServicos(ordenarPorNome(dados))
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Erro ao carregar serviços")
@@ -28,19 +28,19 @@ export function useServicos() {
   }, [carregar])
 
   async function criar(input: ServicoInput) {
-    const criado = await api.post<Servico>("/api/servicos", input)
+    const criado = await apiAdmin.post<Servico>("/servicos", input)
     setServicos((atual) => ordenarPorNome([...atual, criado]))
     return criado
   }
 
   async function atualizar(id: number, input: ServicoInput) {
-    const atualizado = await api.put<Servico>(`/api/servicos/${id}`, input)
+    const atualizado = await apiAdmin.put<Servico>(`/servicos/${id}`, input)
     setServicos((atual) => ordenarPorNome(atual.map((s) => (s.id === id ? atualizado : s))))
     return atualizado
   }
 
   async function excluir(id: number) {
-    await api.delete(`/api/servicos/${id}`)
+    await apiAdmin.delete(`/servicos/${id}`)
     setServicos((atual) => atual.filter((s) => s.id !== id))
   }
 

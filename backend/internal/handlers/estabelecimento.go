@@ -11,25 +11,52 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
+	"agendamento/backend/internal/auth"
 	"agendamento/backend/internal/models"
 )
 
 type EstabelecimentoHandler struct {
-	DB                *gorm.DB
-	EstabelecimentoID uint
+	DB *gorm.DB
 }
 
-func NewEstabelecimentoHandler(db *gorm.DB, estabelecimentoID uint) *EstabelecimentoHandler {
-	return &EstabelecimentoHandler{DB: db, EstabelecimentoID: estabelecimentoID}
+func NewEstabelecimentoHandler(db *gorm.DB) *EstabelecimentoHandler {
+	return &EstabelecimentoHandler{DB: db}
 }
 
+// Get retorna os dados completos do estabelecimento — só pra rotas admin
+// (inclui e-mail, que é informação privada do dono).
 func (h *EstabelecimentoHandler) Get(c *gin.Context) {
 	var estabelecimento models.Estabelecimento
-	if err := h.DB.First(&estabelecimento, h.EstabelecimentoID).Error; err != nil {
+	if err := h.DB.First(&estabelecimento, auth.EstabelecimentoID(c)).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao buscar estabelecimento"})
 		return
 	}
 	c.JSON(http.StatusOK, estabelecimento)
+}
+
+type estabelecimentoPublicoResponse struct {
+	Nome     string `json:"nome"`
+	Slug     string `json:"slug"`
+	Logo     string `json:"logo"`
+	Telefone string `json:"telefone"`
+	Endereco string `json:"endereco"`
+}
+
+// GetPublico retorna só o que a página de agendamento do cliente precisa
+// mostrar — nunca o e-mail nem outros dados internos do dono.
+func (h *EstabelecimentoHandler) GetPublico(c *gin.Context) {
+	var estabelecimento models.Estabelecimento
+	if err := h.DB.First(&estabelecimento, auth.EstabelecimentoID(c)).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao buscar estabelecimento"})
+		return
+	}
+	c.JSON(http.StatusOK, estabelecimentoPublicoResponse{
+		Nome:     estabelecimento.Nome,
+		Slug:     estabelecimento.Slug,
+		Logo:     estabelecimento.Logo,
+		Telefone: estabelecimento.Telefone,
+		Endereco: estabelecimento.Endereco,
+	})
 }
 
 type estabelecimentoInput struct {
@@ -48,7 +75,7 @@ func (h *EstabelecimentoHandler) AtualizarDados(c *gin.Context) {
 	}
 
 	var estabelecimento models.Estabelecimento
-	if err := h.DB.First(&estabelecimento, h.EstabelecimentoID).Error; err != nil {
+	if err := h.DB.First(&estabelecimento, auth.EstabelecimentoID(c)).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao buscar estabelecimento"})
 		return
 	}
@@ -103,7 +130,7 @@ func (h *EstabelecimentoHandler) AtualizarHorario(c *gin.Context) {
 	}
 
 	err = h.DB.Model(&models.Estabelecimento{}).
-		Where("id = ?", h.EstabelecimentoID).
+		Where("id = ?", auth.EstabelecimentoID(c)).
 		Update("horario_funcionamento", datatypes.JSON(dados)).Error
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao atualizar horário"})
@@ -151,7 +178,7 @@ func (h *EstabelecimentoHandler) AtualizarIcones(c *gin.Context) {
 	}
 
 	err = h.DB.Model(&models.Estabelecimento{}).
-		Where("id = ?", h.EstabelecimentoID).
+		Where("id = ?", auth.EstabelecimentoID(c)).
 		Update("icones_padrao", datatypes.JSON(dados)).Error
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao atualizar ícones"})
@@ -159,4 +186,37 @@ func (h *EstabelecimentoHandler) AtualizarIcones(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"icones_padrao": icones})
+}
+
+const logoTamanhoMaximo = 2 * 1024 * 1024 // ~2MB em base64 (~1.5MB de imagem)
+
+type logoInput struct {
+	Logo string `json:"logo"` // data URI (ex: "data:image/png;base64,..."); "" remove a logo
+}
+
+// AtualizarLogo troca a logo do estabelecimento, guardada como data URI
+// direto no banco (v1 não precisa de um serviço de storage à parte pra isso).
+func (h *EstabelecimentoHandler) AtualizarLogo(c *gin.Context) {
+	var input logoInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if len(input.Logo) > logoTamanhoMaximo {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "imagem muito grande (máximo ~1.5MB)"})
+		return
+	}
+	if input.Logo != "" && !strings.HasPrefix(input.Logo, "data:image/") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "formato de imagem inválido"})
+		return
+	}
+
+	err := h.DB.Model(&models.Estabelecimento{}).
+		Where("id = ?", auth.EstabelecimentoID(c)).
+		Update("logo", input.Logo).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao atualizar logo"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"logo": input.Logo})
 }

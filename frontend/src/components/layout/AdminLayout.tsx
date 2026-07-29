@@ -1,9 +1,18 @@
 import { useEffect, useState } from "react"
-import { NavLink, Outlet, useLocation } from "react-router-dom"
-import { CalendarDays, CalendarRange, Menu, Settings, Sparkles } from "lucide-react"
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
+import {
+  CalendarDays,
+  CalendarRange,
+  ExternalLink,
+  LogOut,
+  Menu,
+  Settings,
+  Sparkles,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { useAuth } from "@/contexts/AuthContext"
 
 const NAV_ITEMS = [
   { to: "/admin/agenda", label: "Agenda", icon: CalendarRange },
@@ -45,6 +54,43 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   )
 }
 
+function RodapeConta() {
+  const { estabelecimento, logout } = useAuth()
+  const navigate = useNavigate()
+
+  function sair() {
+    logout()
+    navigate("/login")
+  }
+
+  return (
+    <div className="mt-auto flex flex-col gap-1 border-t border-border pt-3">
+      {estabelecimento && (
+        <>
+          <p className="truncate px-3 text-sm font-medium">{estabelecimento.nome}</p>
+          <a
+            href={`/${estabelecimento.slug}`}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <ExternalLink className="size-4" />
+            Ver página pública
+          </a>
+        </>
+      )}
+      <button
+        type="button"
+        onClick={sair}
+        className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+      >
+        <LogOut className="size-4" />
+        Sair
+      </button>
+    </div>
+  )
+}
+
 export function AdminLayout() {
   const [menuAberto, setMenuAberto] = useState(false)
   const { pathname } = useLocation()
@@ -69,15 +115,17 @@ export function AdminLayout() {
           <Marca />
         </div>
         <NavLinks />
+        <RodapeConta />
       </aside>
 
       <Sheet open={menuAberto} onOpenChange={setMenuAberto}>
-        <SheetContent side="left" className="w-64">
+        <SheetContent side="left" className="flex w-64 flex-col">
           <SheetHeader>
             <SheetTitle>Menu</SheetTitle>
           </SheetHeader>
-          <nav className="flex flex-col gap-1 px-4">
+          <nav className="flex flex-1 flex-col gap-1 px-4">
             <NavLinks onNavigate={() => setMenuAberto(false)} />
+            <RodapeConta />
           </nav>
         </SheetContent>
       </Sheet>

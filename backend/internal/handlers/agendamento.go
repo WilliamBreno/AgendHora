@@ -9,18 +9,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"agendamento/backend/internal/auth"
 	"agendamento/backend/internal/models"
 	"agendamento/backend/internal/notifications"
 )
 
 type AgendamentoHandler struct {
-	DB                *gorm.DB
-	EstabelecimentoID uint
-	Notificador       *notifications.Notificador
+	DB          *gorm.DB
+	Notificador *notifications.Notificador
 }
 
-func NewAgendamentoHandler(db *gorm.DB, estabelecimentoID uint, notificador *notifications.Notificador) *AgendamentoHandler {
-	return &AgendamentoHandler{DB: db, EstabelecimentoID: estabelecimentoID, Notificador: notificador}
+func NewAgendamentoHandler(db *gorm.DB, notificador *notifications.Notificador) *AgendamentoHandler {
+	return &AgendamentoHandler{DB: db, Notificador: notificador}
 }
 
 type agendamentoInput struct {
@@ -32,7 +32,8 @@ type agendamentoInput struct {
 	Hora            string `json:"hora" binding:"required"` // "15:04"
 	Observacoes     string `json:"observacoes"`
 	// Encaixe, quando true, autoriza criar mesmo com conflito de horário
-	// detectado (ver comentário no model). Sem esse sinal, conflito = 409.
+	// detectado (ver comentário no model). Só é respeitado em criação feita
+	// pelo admin — a rota pública nunca aceita encaixe.
 	Encaixe bool `json:"encaixe"`
 }
 
@@ -83,6 +84,18 @@ func minutosDoDia(hora string) (int, error) {
 	return t.Hour()*60 + t.Minute(), nil
 }
 
+// apenasDigitos normaliza um telefone pra comparação, ignorando espaços,
+// parênteses, traço etc — assim "(11) 99999-8888" e "11999998888" combinam.
+func apenasDigitos(s string) string {
+	var sb strings.Builder
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			sb.WriteRune(r)
+		}
+	}
+	return sb.String()
+}
+
 type intervaloOcupado struct {
 	inicio int
 	fim    int
@@ -123,14 +136,14 @@ func intervalosOcupados(db *gorm.DB, estabelecimentoID uint, data time.Time, ign
 // confirmado já existente naquele dia. A checagem é por estabelecimento
 // inteiro, não por serviço: a v1 assume um único profissional/recurso
 // atendendo por vez.
-func (h *AgendamentoHandler) haConflito(data time.Time, hora string, duracaoMin int, ignorarID uint) (bool, error) {
+func (h *AgendamentoHandler) haConflito(estabelecimentoID uint, data time.Time, hora string, duracaoMin int, ignorarID uint) (bool, error) {
 	inicio, err := minutosDoDia(hora)
 	if err != nil {
 		return false, err
 	}
 	fim := inicio + duracaoMin
 
-	ocupados, err := intervalosOcupados(h.DB, h.EstabelecimentoID, data, ignorarID)
+	ocupados, err := intervalosOcupados(h.DB, estabelecimentoID, data, ignorarID)
 	if err != nil {
 		return false, err
 	}
@@ -143,7 +156,7 @@ func (h *AgendamentoHandler) haConflito(data time.Time, hora string, duracaoMin 
 }
 
 func (h *AgendamentoHandler) List(c *gin.Context) {
-	query := h.DB.Preload("Servico").Where("estabelecimento_id = ?", h.EstabelecimentoID)
+	query := h.DB.Preload("Servico").Where("estabelecimento_id = ?", auth.EstabelecimentoID(c))
 
 	if inicioStr := c.Query("inicio"); inicioStr != "" {
 		inicio, err := time.Parse("2006-01-02", inicioStr)
@@ -175,7 +188,38 @@ func (h *AgendamentoHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, respostas)
 }
 
-func (h *AgendamentoHandler) Create(c *gin.Context) {
+// MeusAgendamentos é a rota pública que permite o cliente ver os próprios
+// agendamentos digitando o telefone — sem precisar de login.
+func (h *AgendamentoHandler) MeusAgendamentos(c *gin.Context) {
+	telefone := apenasDigitos(c.Query("telefone"))
+	if telefone == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "informe o telefone"})
+		return
+	}
+
+	var agendamentos []models.Agendamento
+	err := h.DB.Preload("Servico").
+		Where(
+			"estabelecimento_id = ? AND regexp_replace(cliente_telefone, '[^0-9]', '', 'g') = ?",
+			auth.EstabelecimentoID(c), telefone,
+		).
+		Order("data desc, hora desc").
+		Find(&agendamentos).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao buscar agendamentos"})
+		return
+	}
+
+	respostas := make([]agendamentoResponse, 0, len(agendamentos))
+	for _, a := range agendamentos {
+		respostas = append(respostas, toAgendamentoResponse(a))
+	}
+	c.JSON(http.StatusOK, respostas)
+}
+
+func (h *AgendamentoHandler) criar(c *gin.Context, permitirEncaixe bool) {
+	estabelecimentoID := auth.EstabelecimentoID(c)
+
 	var input agendamentoInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -193,7 +237,7 @@ func (h *AgendamentoHandler) Create(c *gin.Context) {
 	}
 
 	var servico models.Servico
-	err = h.DB.Where("id = ? AND estabelecimento_id = ?", input.ServicoID, h.EstabelecimentoID).
+	err = h.DB.Where("id = ? AND estabelecimento_id = ?", input.ServicoID, estabelecimentoID).
 		First(&servico).Error
 	if err == gorm.ErrRecordNotFound {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "serviço não encontrado"})
@@ -204,12 +248,13 @@ func (h *AgendamentoHandler) Create(c *gin.Context) {
 		return
 	}
 
-	conflito, err := h.haConflito(data, input.Hora, servico.DuracaoMin, 0)
+	conflito, err := h.haConflito(estabelecimentoID, data, input.Hora, servico.DuracaoMin, 0)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao verificar disponibilidade"})
 		return
 	}
-	if conflito && !input.Encaixe {
+	encaixe := conflito && permitirEncaixe && input.Encaixe
+	if conflito && !encaixe {
 		c.JSON(http.StatusConflict, gin.H{"error": "horário indisponível"})
 		return
 	}
@@ -223,8 +268,8 @@ func (h *AgendamentoHandler) Create(c *gin.Context) {
 		Hora:              input.Hora,
 		Status:            models.StatusConfirmado,
 		Observacoes:       strings.TrimSpace(input.Observacoes),
-		Encaixe:           conflito,
-		EstabelecimentoID: h.EstabelecimentoID,
+		Encaixe:           encaixe,
+		EstabelecimentoID: estabelecimentoID,
 	}
 	if err := h.DB.Create(&agendamento).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao criar agendamento"})
@@ -234,12 +279,24 @@ func (h *AgendamentoHandler) Create(c *gin.Context) {
 
 	if h.Notificador != nil {
 		var estabelecimento models.Estabelecimento
-		if err := h.DB.First(&estabelecimento, h.EstabelecimentoID).Error; err == nil {
+		if err := h.DB.First(&estabelecimento, estabelecimentoID).Error; err == nil {
 			go h.Notificador.NotificarNovoAgendamento(estabelecimento, agendamento)
 		}
 	}
 
 	c.JSON(http.StatusCreated, toAgendamentoResponse(agendamento))
+}
+
+// Create é usado pelo admin — pode passar encaixe:true pra furar um conflito
+// de propósito (atendimento por telefone/balcão, ver painel de agendamento).
+func (h *AgendamentoHandler) Create(c *gin.Context) {
+	h.criar(c, true)
+}
+
+// CreatePublico é o self-service da página pública — nunca aceita encaixe,
+// mesmo que o corpo da requisição mande encaixe:true.
+func (h *AgendamentoHandler) CreatePublico(c *gin.Context) {
+	h.criar(c, false)
 }
 
 func (h *AgendamentoHandler) buscarAgendamento(c *gin.Context) (*models.Agendamento, bool) {
@@ -251,7 +308,7 @@ func (h *AgendamentoHandler) buscarAgendamento(c *gin.Context) (*models.Agendame
 
 	var agendamento models.Agendamento
 	err = h.DB.Preload("Servico").
-		Where("id = ? AND estabelecimento_id = ?", id, h.EstabelecimentoID).
+		Where("id = ? AND estabelecimento_id = ?", id, auth.EstabelecimentoID(c)).
 		First(&agendamento).Error
 	if err == gorm.ErrRecordNotFound {
 		c.JSON(http.StatusNotFound, gin.H{"error": "agendamento não encontrado"})
@@ -272,16 +329,9 @@ func (h *AgendamentoHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, toAgendamentoResponse(*agendamento))
 }
 
-// Cancelar transiciona o agendamento para "cancelado". Não existe exclusão
-// definitiva: cancelar preserva o histórico, e é a única transição de status
-// que o painel admin expõe na v1 (aceitar/recusar ficam para quando o
-// interruptor opcional de aprovação manual existir).
-func (h *AgendamentoHandler) Cancelar(c *gin.Context) {
-	agendamento, ok := h.buscarAgendamento(c)
-	if !ok {
-		return
-	}
-
+// cancelar transiciona o agendamento para "cancelado". Não existe exclusão
+// definitiva: cancelar preserva o histórico.
+func (h *AgendamentoHandler) cancelar(c *gin.Context, agendamento *models.Agendamento) {
 	if agendamento.Status != models.StatusCancelado {
 		if err := h.DB.Model(agendamento).Update("status", models.StatusCancelado).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao cancelar agendamento"})
@@ -291,11 +341,48 @@ func (h *AgendamentoHandler) Cancelar(c *gin.Context) {
 
 		if h.Notificador != nil {
 			var estabelecimento models.Estabelecimento
-			if err := h.DB.First(&estabelecimento, h.EstabelecimentoID).Error; err == nil {
+			if err := h.DB.First(&estabelecimento, agendamento.EstabelecimentoID).Error; err == nil {
 				go h.Notificador.NotificarCancelamento(estabelecimento, *agendamento)
 			}
 		}
 	}
 
 	c.JSON(http.StatusOK, toAgendamentoResponse(*agendamento))
+}
+
+// Cancelar é a ação do painel admin (aceitar/recusar ficam para quando o
+// interruptor opcional de aprovação manual existir).
+func (h *AgendamentoHandler) Cancelar(c *gin.Context) {
+	agendamento, ok := h.buscarAgendamento(c)
+	if !ok {
+		return
+	}
+	h.cancelar(c, agendamento)
+}
+
+type cancelarPublicoInput struct {
+	Telefone string `json:"telefone" binding:"required"`
+}
+
+// CancelarPublico deixa o próprio cliente cancelar pela página pública,
+// mas só se o telefone enviado bater com o do agendamento — sem isso,
+// bastaria adivinhar um ID pra cancelar o horário de outra pessoa.
+func (h *AgendamentoHandler) CancelarPublico(c *gin.Context) {
+	var input cancelarPublicoInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	agendamento, ok := h.buscarAgendamento(c)
+	if !ok {
+		return
+	}
+
+	if apenasDigitos(agendamento.ClienteTelefone) != apenasDigitos(input.Telefone) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "telefone não confere com o agendamento"})
+		return
+	}
+
+	h.cancelar(c, agendamento)
 }

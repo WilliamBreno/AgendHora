@@ -1,54 +1,31 @@
 package database
 
 import (
-	"encoding/json"
 	"log"
 
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
 	"agendamento/backend/internal/models"
+	"agendamento/backend/internal/slug"
 )
 
-// EnsureEstabelecimentoPadrao garante que existe um Estabelecimento cadastrado
-// (a v1 é mono-estabelecimento) e retorna o seu ID.
-func EnsureEstabelecimentoPadrao(db *gorm.DB) uint {
-	var estabelecimento models.Estabelecimento
-
-	err := db.Order("id asc").First(&estabelecimento).Error
-	if err == nil {
-		return estabelecimento.ID
-	}
-	if err != gorm.ErrRecordNotFound {
-		log.Fatalf("erro ao buscar estabelecimento: %v", err)
+// MigrarSlugsLegados preenche o slug de qualquer Estabelecimento criado antes
+// da v2 (multi-empresa) ter esse campo. Empresas novas ganham slug no
+// cadastro (ver handlers.Registro); isso é só pra não perder dados antigos.
+func MigrarSlugsLegados(db *gorm.DB) {
+	var legados []models.Estabelecimento
+	if err := db.Where("slug = ? OR slug IS NULL", "").Find(&legados).Error; err != nil {
+		log.Fatalf("erro ao buscar estabelecimentos sem slug: %v", err)
 	}
 
-	icones, _ := json.Marshal(models.IconesPadraoDefault)
-	horario, _ := json.Marshal(horarioFuncionamentoDefault())
-
-	estabelecimento = models.Estabelecimento{
-		Nome:                 "Meu Estabelecimento",
-		IconesPadrao:         datatypes.JSON(icones),
-		HorarioFuncionamento: datatypes.JSON(horario),
-	}
-	if err := db.Create(&estabelecimento).Error; err != nil {
-		log.Fatalf("erro ao criar estabelecimento padrão: %v", err)
-	}
-
-	return estabelecimento.ID
-}
-
-// horarioFuncionamentoDefault é um horário comercial razoável (seg-sáb,
-// 09:00-18:00, domingo fechado) usado só na primeira criação do
-// estabelecimento — o dono ajusta em Configurações depois.
-func horarioFuncionamentoDefault() models.HorarioFuncionamento {
-	horario := models.HorarioFuncionamento{}
-	for _, dia := range models.DiasSemana {
-		if dia == "domingo" {
-			horario[dia] = models.HorarioDia{Fechado: true}
-			continue
+	for _, estabelecimento := range legados {
+		novoSlug, err := slug.GerarUnico(db, estabelecimento.Nome)
+		if err != nil {
+			log.Fatalf("erro ao gerar slug para estabelecimento %d: %v", estabelecimento.ID, err)
 		}
-		horario[dia] = models.HorarioDia{Abre: "09:00", Fecha: "18:00"}
+		if err := db.Model(&estabelecimento).Update("slug", novoSlug).Error; err != nil {
+			log.Fatalf("erro ao migrar slug do estabelecimento %d: %v", estabelecimento.ID, err)
+		}
+		log.Printf("estabelecimento %d migrado para slug %q", estabelecimento.ID, novoSlug)
 	}
-	return horario
 }

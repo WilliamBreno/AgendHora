@@ -1,0 +1,139 @@
+package handlers
+
+import (
+	"encoding/json"
+	"net/http"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/datatypes"
+	"gorm.io/gorm"
+
+	"agendamento/backend/internal/auth"
+	"agendamento/backend/internal/models"
+	"agendamento/backend/internal/slug"
+)
+
+type AuthHandler struct {
+	DB          *gorm.DB
+	Gerenciador *auth.Gerenciador
+}
+
+func NewAuthHandler(db *gorm.DB, gerenciador *auth.Gerenciador) *AuthHandler {
+	return &AuthHandler{DB: db, Gerenciador: gerenciador}
+}
+
+type sessaoResponse struct {
+	Token           string                 `json:"token"`
+	Estabelecimento models.Estabelecimento `json:"estabelecimento"`
+}
+
+type registroInput struct {
+	NomeEstabelecimento string `json:"nome_estabelecimento" binding:"required"`
+	Email               string `json:"email" binding:"required,email"`
+	Senha               string `json:"senha" binding:"required,min=6"`
+}
+
+// Registro cria uma empresa nova (com slug e configurações padrão) e o
+// primeiro usuário dela. Cada empresa na plataforma nasce por aqui — não
+// existe mais um estabelecimento único criado automaticamente no boot.
+func (h *AuthHandler) Registro(c *gin.Context) {
+	var input registroInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	email := strings.ToLower(strings.TrimSpace(input.Email))
+
+	var existentes int64
+	h.DB.Model(&models.Usuario{}).Where("email = ?", email).Count(&existentes)
+	if existentes > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "já existe uma conta com esse e-mail"})
+		return
+	}
+
+	slugGerado, err := slug.GerarUnico(h.DB, input.NomeEstabelecimento)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao gerar identificador da empresa"})
+		return
+	}
+
+	senhaHash, err := auth.HashSenha(input.Senha)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao processar senha"})
+		return
+	}
+
+	icones, _ := json.Marshal(models.IconesPadraoDefault)
+	horario, _ := json.Marshal(models.HorarioFuncionamentoDefault())
+
+	estabelecimento := models.Estabelecimento{
+		Nome:                 strings.TrimSpace(input.NomeEstabelecimento),
+		Slug:                 slugGerado,
+		Email:                email,
+		IconesPadrao:         datatypes.JSON(icones),
+		HorarioFuncionamento: datatypes.JSON(horario),
+	}
+
+	usuario := models.Usuario{
+		Email:             email,
+		SenhaHash:         senhaHash,
+		EstabelecimentoID: estabelecimento.ID,
+	}
+	err = h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&estabelecimento).Error; err != nil {
+			return err
+		}
+		usuario.EstabelecimentoID = estabelecimento.ID
+		return tx.Create(&usuario).Error
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao criar conta"})
+		return
+	}
+
+	token, err := h.Gerenciador.GerarToken(usuario.ID, estabelecimento.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao gerar sessão"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, sessaoResponse{Token: token, Estabelecimento: estabelecimento})
+}
+
+type loginInput struct {
+	Email string `json:"email" binding:"required"`
+	Senha string `json:"senha" binding:"required"`
+}
+
+func (h *AuthHandler) Login(c *gin.Context) {
+	var input loginInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	email := strings.ToLower(strings.TrimSpace(input.Email))
+
+	var usuario models.Usuario
+	err := h.DB.Where("email = ?", email).First(&usuario).Error
+	if err != nil || !auth.VerificarSenha(usuario.SenhaHash, input.Senha) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "e-mail ou senha inválidos"})
+		return
+	}
+
+	var estabelecimento models.Estabelecimento
+	if err := h.DB.First(&estabelecimento, usuario.EstabelecimentoID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao buscar estabelecimento"})
+		return
+	}
+
+	token, err := h.Gerenciador.GerarToken(usuario.ID, estabelecimento.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao gerar sessão"})
+		return
+	}
+
+	c.JSON(http.StatusOK, sessaoResponse{Token: token, Estabelecimento: estabelecimento})
+}

@@ -14,6 +14,7 @@ type Config struct {
 	ResendAPIKey   string
 	ResendFrom     string
 	AllowedOrigins []string
+	JWTSecret      string
 }
 
 // Load lê o .env (se existir) e as variáveis de ambiente do processo.
@@ -44,11 +45,17 @@ func Load() Config {
 		}
 	}
 
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		log.Fatal("JWT_SECRET não definida")
+	}
+
 	return Config{
 		DatabaseURL:    dbURL,
 		Port:           port,
 		ResendAPIKey:   os.Getenv("RESEND_API_KEY"),
 		ResendFrom:     resendFrom,
 		AllowedOrigins: origensExtras,
+		JWTSecret:      jwtSecret,
 	}
 }

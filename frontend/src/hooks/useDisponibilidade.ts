@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { api, ApiError } from "@/lib/api"
+import { apiPublico, ApiError } from "@/lib/api"
 
-export function useDisponibilidade(servicoId: number | null, data: string) {
+export function useDisponibilidade(slug: string, servicoId: number | null, data: string) {
   const [horarios, setHorarios] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -15,8 +15,8 @@ export function useDisponibilidade(servicoId: number | null, data: string) {
     let cancelado = false
     setLoading(true)
 
-    api
-      .get<{ horarios: string[] }>(`/api/disponibilidade?servico_id=${servicoId}&data=${data}`)
+    apiPublico(slug)
+      .get<{ horarios: string[] }>(`/disponibilidade?servico_id=${servicoId}&data=${data}`)
       .then((res) => {
         if (!cancelado) setHorarios(res.horarios)
       })
@@ -33,7 +33,7 @@ export function useDisponibilidade(servicoId: number | null, data: string) {
     return () => {
       cancelado = true
     }
-  }, [servicoId, data])
+  }, [slug, servicoId, data])
 
   return { horarios, loading }
 }

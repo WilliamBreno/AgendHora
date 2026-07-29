@@ -16,3 +16,18 @@ type HorarioDia struct {
 
 // HorarioFuncionamento é o valor decodificado de Estabelecimento.HorarioFuncionamento.
 type HorarioFuncionamento map[string]HorarioDia
+
+// HorarioFuncionamentoDefault é um horário comercial razoável (seg-sáb,
+// 09:00-18:00, domingo fechado) usado ao cadastrar uma empresa nova — o
+// dono ajusta em Configurações depois.
+func HorarioFuncionamentoDefault() HorarioFuncionamento {
+	horario := HorarioFuncionamento{}
+	for _, dia := range DiasSemana {
+		if dia == "domingo" {
+			horario[dia] = HorarioDia{Fechado: true}
+			continue
+		}
+		horario[dia] = HorarioDia{Abre: "09:00", Fecha: "18:00"}
+	}
+	return horario
+}

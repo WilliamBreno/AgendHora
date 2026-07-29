@@ -10,16 +10,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"agendamento/backend/internal/auth"
 	"agendamento/backend/internal/models"
 )
 
 type ServicoHandler struct {
-	DB                *gorm.DB
-	EstabelecimentoID uint
+	DB *gorm.DB
 }
 
-func NewServicoHandler(db *gorm.DB, estabelecimentoID uint) *ServicoHandler {
-	return &ServicoHandler{DB: db, EstabelecimentoID: estabelecimentoID}
+func NewServicoHandler(db *gorm.DB) *ServicoHandler {
+	return &ServicoHandler{DB: db}
 }
 
 type servicoInput struct {
@@ -35,12 +35,12 @@ func validarCor(cor string) bool {
 	return slices.Contains(models.CoresServico, cor)
 }
 
-func (h *ServicoHandler) validarIcone(icone string) bool {
+func (h *ServicoHandler) validarIcone(icone string, estabelecimentoID uint) bool {
 	if icone == "" {
 		return true
 	}
 	var estabelecimento models.Estabelecimento
-	if err := h.DB.Select("icones_padrao").First(&estabelecimento, h.EstabelecimentoID).Error; err != nil {
+	if err := h.DB.Select("icones_padrao").First(&estabelecimento, estabelecimentoID).Error; err != nil {
 		return false
 	}
 	var icones []string
@@ -52,7 +52,7 @@ func (h *ServicoHandler) validarIcone(icone string) bool {
 
 func (h *ServicoHandler) List(c *gin.Context) {
 	var servicos []models.Servico
-	err := h.DB.Where("estabelecimento_id = ?", h.EstabelecimentoID).
+	err := h.DB.Where("estabelecimento_id = ?", auth.EstabelecimentoID(c)).
 		Order("nome asc").
 		Find(&servicos).Error
 	if err != nil {
@@ -63,6 +63,8 @@ func (h *ServicoHandler) List(c *gin.Context) {
 }
 
 func (h *ServicoHandler) Create(c *gin.Context) {
+	estabelecimentoID := auth.EstabelecimentoID(c)
+
 	var input servicoInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -72,7 +74,7 @@ func (h *ServicoHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "cor inválida"})
 		return
 	}
-	if !h.validarIcone(input.Icone) {
+	if !h.validarIcone(input.Icone, estabelecimentoID) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ícone inválido"})
 		return
 	}
@@ -84,7 +86,7 @@ func (h *ServicoHandler) Create(c *gin.Context) {
 		Descricao:         strings.TrimSpace(input.Descricao),
 		Cor:               input.Cor,
 		Icone:             input.Icone,
-		EstabelecimentoID: h.EstabelecimentoID,
+		EstabelecimentoID: estabelecimentoID,
 	}
 	if err := h.DB.Create(&servico).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao criar serviço"})
@@ -101,7 +103,7 @@ func (h *ServicoHandler) buscarServico(c *gin.Context) (*models.Servico, bool) {
 	}
 
 	var servico models.Servico
-	err = h.DB.Where("id = ? AND estabelecimento_id = ?", id, h.EstabelecimentoID).First(&servico).Error
+	err = h.DB.Where("id = ? AND estabelecimento_id = ?", id, auth.EstabelecimentoID(c)).First(&servico).Error
 	if err == gorm.ErrRecordNotFound {
 		c.JSON(http.StatusNotFound, gin.H{"error": "serviço não encontrado"})
 		return nil, false
@@ -136,7 +138,7 @@ func (h *ServicoHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "cor inválida"})
 		return
 	}
-	if !h.validarIcone(input.Icone) {
+	if !h.validarIcone(input.Icone, servico.EstabelecimentoID) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ícone inválido"})
 		return
 	}

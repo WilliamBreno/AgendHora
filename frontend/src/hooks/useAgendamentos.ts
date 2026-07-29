@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { api, ApiError } from "@/lib/api"
+import { apiAdmin, ApiError } from "@/lib/api"
 import type { Agendamento, AgendamentoInput } from "@/types"
 
 export function useAgendamentos(inicio: string, fim: string) {
@@ -10,9 +10,7 @@ export function useAgendamentos(inicio: string, fim: string) {
   const carregar = useCallback(async () => {
     setLoading(true)
     try {
-      const dados = await api.get<Agendamento[]>(
-        `/api/agendamentos?inicio=${inicio}&fim=${fim}`
-      )
+      const dados = await apiAdmin.get<Agendamento[]>(`/agendamentos?inicio=${inicio}&fim=${fim}`)
       setAgendamentos(dados)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Erro ao carregar agenda")
@@ -26,13 +24,13 @@ export function useAgendamentos(inicio: string, fim: string) {
   }, [carregar])
 
   async function criar(input: AgendamentoInput) {
-    const criado = await api.post<Agendamento>("/api/agendamentos", input)
+    const criado = await apiAdmin.post<Agendamento>("/agendamentos", input)
     setAgendamentos((atual) => [...atual, criado])
     return criado
   }
 
   async function cancelar(id: number) {
-    const atualizado = await api.patch<Agendamento>(`/api/agendamentos/${id}/cancelar`)
+    const atualizado = await apiAdmin.patch<Agendamento>(`/agendamentos/${id}/cancelar`)
     setAgendamentos((atual) => atual.map((a) => (a.id === id ? atualizado : a)))
     return atualizado
   }

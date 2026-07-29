@@ -9,16 +9,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"agendamento/backend/internal/auth"
 	"agendamento/backend/internal/models"
 )
 
 type DisponibilidadeHandler struct {
-	DB                *gorm.DB
-	EstabelecimentoID uint
+	DB *gorm.DB
 }
 
-func NewDisponibilidadeHandler(db *gorm.DB, estabelecimentoID uint) *DisponibilidadeHandler {
-	return &DisponibilidadeHandler{DB: db, EstabelecimentoID: estabelecimentoID}
+func NewDisponibilidadeHandler(db *gorm.DB) *DisponibilidadeHandler {
+	return &DisponibilidadeHandler{DB: db}
 }
 
 // passoMinutos é a granularidade dos horários candidatos gerados — não
@@ -45,8 +45,10 @@ func (h *DisponibilidadeHandler) Listar(c *gin.Context) {
 		return
 	}
 
+	estabelecimentoID := auth.EstabelecimentoID(c)
+
 	var servico models.Servico
-	err = h.DB.Where("id = ? AND estabelecimento_id = ?", servicoID, h.EstabelecimentoID).First(&servico).Error
+	err = h.DB.Where("id = ? AND estabelecimento_id = ?", servicoID, estabelecimentoID).First(&servico).Error
 	if err == gorm.ErrRecordNotFound {
 		c.JSON(http.StatusNotFound, gin.H{"error": "serviço não encontrado"})
 		return
@@ -57,7 +59,7 @@ func (h *DisponibilidadeHandler) Listar(c *gin.Context) {
 	}
 
 	var estabelecimento models.Estabelecimento
-	if err := h.DB.First(&estabelecimento, h.EstabelecimentoID).Error; err != nil {
+	if err := h.DB.First(&estabelecimento, estabelecimentoID).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao buscar estabelecimento"})
 		return
 	}
@@ -81,7 +83,7 @@ func (h *DisponibilidadeHandler) Listar(c *gin.Context) {
 		return
 	}
 
-	ocupados, err := intervalosOcupados(h.DB, h.EstabelecimentoID, data, 0)
+	ocupados, err := intervalosOcupados(h.DB, estabelecimentoID, data, 0)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao verificar disponibilidade"})
 		return
