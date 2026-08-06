@@ -20,7 +20,7 @@ CLAUDE.md    → este arquivo
 - **Backend**: Go (Gin) + GORM + PostgreSQL
 - **Frontend**: React 19 + TypeScript + Vite + Tailwind + shadcn/ui (Base UI, não Radix) + lucide-react
 - **Animação**: GSAP para as transições da agenda (troca de mês, abertura do painel de detalhe, stagger de listas de agendamentos). Magic UI só em 1–2 pontos pontuais de destaque (ex: contador animado no dashboard), nunca no fluxo operacional principal — mantém a área admin rápida e limpa.
-- **Notificações**: Resend (e-mail) e whatsmeow (WhatsApp) — mesmos serviços já usados no projeto Drenux; implementar como service layer própria deste projeto, não importar código do Drenux.
+- **Notificações**: Brevo (e-mail, via API REST direta) e whatsmeow (WhatsApp) — troca feita a partir do Resend porque o plano grátis dele trava em 1 domínio verificado (o do Drenux já ocupa essa vaga) e o do Brevo não tem esse limite; implementar como service layer própria deste projeto, não importar código do Drenux.
 
 ## Escopo desta primeira versão
 
@@ -71,7 +71,7 @@ Dúvida resolvida: **ninguém precisa confirmar manualmente** no fluxo padrão. 
 - **Cadastro de serviços**: listagem em cards com barra de cor lateral; criar/editar/excluir; campos nome, preço, duração, descrição, cor (paleta fixa de 6) e ícone
 
 ### 3. Notificações
-- Cliente: e-mail (Resend) e/ou WhatsApp (whatsmeow) de confirmação assim que agenda
+- Cliente: e-mail (Brevo) e/ou WhatsApp (whatsmeow) de confirmação assim que agenda
 - Dono: notificação a cada novo agendamento (mesmo canal, ou indicador simples dentro do admin)
 
 ### 4. Dashboard (visão geral do estabelecimento)

@@ -30,7 +30,7 @@ func NewProfissionalHandler(db *gorm.DB, gerenciador *auth.Gerenciador, notifica
 // linkConvite monta o link de cadastro do convite. É devolvido tanto na
 // resposta da API quanto usado no corpo do e-mail — assim o dono sempre tem
 // como copiar e mandar manualmente (WhatsApp, SMS) se o e-mail não chegar
-// (ex: conta do Resend em modo sandbox, sem domínio verificado).
+// (ex: domínio de e-mail ainda não verificado no provedor).
 //
 // A base do link vem do cabeçalho Origin da própria requisição — é o
 // endereço do frontend que o dono está usando de verdade nesse momento

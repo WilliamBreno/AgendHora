@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { CalendarDays } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -93,7 +92,7 @@ export function ConvitePage() {
     <div className="flex min-h-svh items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <CalendarDays className="size-8 text-primary" />
+          <img src="/logo.png" alt="AgendHora" className="size-12 rounded-xl" />
           <h1 className="font-heading text-2xl font-semibold">AgendHora</h1>
           <p className="text-sm text-muted-foreground">
             Você foi convidado(a) por <strong>{convite.nome_estabelecimento}</strong>. Crie sua

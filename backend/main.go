@@ -17,7 +17,7 @@ func main() {
 	database.MigrarSlugsLegados(db)
 	database.MigrarProfissionais(db)
 
-	notificador := notifications.New(cfg.ResendAPIKey, cfg.ResendFrom)
+	notificador := notifications.New(cfg.BrevoAPIKey, cfg.EmailRemetenteNome, cfg.EmailRemetente)
 
 	router := api.NewRouter(db, cfg.JWTSecret, notificador, cfg.AllowedOrigins, cfg.FrontendURL)
 

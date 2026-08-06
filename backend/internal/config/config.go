@@ -9,13 +9,14 @@ import (
 )
 
 type Config struct {
-	DatabaseURL    string
-	Port           string
-	ResendAPIKey   string
-	ResendFrom     string
-	AllowedOrigins []string
-	JWTSecret      string
-	FrontendURL    string
+	DatabaseURL        string
+	Port               string
+	BrevoAPIKey        string
+	EmailRemetenteNome string
+	EmailRemetente     string
+	AllowedOrigins     []string
+	JWTSecret          string
+	FrontendURL        string
 }
 
 // Load lê o .env (se existir) e as variáveis de ambiente do processo.
@@ -34,9 +35,13 @@ func Load() Config {
 		port = "8080"
 	}
 
-	resendFrom := os.Getenv("RESEND_FROM")
-	if resendFrom == "" {
-		resendFrom = "AgendHora <onboarding@resend.dev>"
+	emailRemetenteNome := os.Getenv("EMAIL_REMETENTE_NOME")
+	if emailRemetenteNome == "" {
+		emailRemetenteNome = "AgendHora"
+	}
+	emailRemetente := os.Getenv("EMAIL_REMETENTE")
+	if emailRemetente == "" {
+		emailRemetente = "no-reply@agendhora.com.br"
 	}
 
 	var origensExtras []string
@@ -57,12 +62,13 @@ func Load() Config {
 	}
 
 	return Config{
-		DatabaseURL:    dbURL,
-		Port:           port,
-		ResendAPIKey:   os.Getenv("RESEND_API_KEY"),
-		ResendFrom:     resendFrom,
-		AllowedOrigins: origensExtras,
-		JWTSecret:      jwtSecret,
-		FrontendURL:    frontendURL,
+		DatabaseURL:        dbURL,
+		Port:               port,
+		BrevoAPIKey:        os.Getenv("BREVO_API_KEY"),
+		EmailRemetenteNome: emailRemetenteNome,
+		EmailRemetente:     emailRemetente,
+		AllowedOrigins:     origensExtras,
+		JWTSecret:          jwtSecret,
+		FrontendURL:        frontendURL,
 	}
 }

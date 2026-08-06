@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react"
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
 import {
-  CalendarDays,
   CalendarRange,
   ExternalLink,
   LayoutDashboard,
@@ -56,7 +55,7 @@ function Marca() {
 
   return (
     <div className="flex min-w-0 items-center gap-2 px-2">
-      <CalendarDays className="size-5 shrink-0 text-primary" />
+      <img src="/logo.png" alt="AgendHora" className="size-7 shrink-0 rounded-md" />
       <span className="truncate font-heading text-lg font-semibold">AgendHora</span>
     </div>
   )
