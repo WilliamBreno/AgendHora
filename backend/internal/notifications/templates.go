@@ -74,6 +74,17 @@ func emailDonoHTML(estabelecimento models.Estabelecimento, agendamento models.Ag
 	return envelope("Novo agendamento", corpo)
 }
 
+func emailConviteProfissionalHTML(estabelecimento models.Estabelecimento, link string) string {
+	corpo := fmt.Sprintf(
+		`<p style="font-size:15px;margin:0 0 4px;">Você foi convidado(a) para fazer parte da equipe de <strong>%s</strong> no AgendHora.</p>
+		<p style="font-size:15px;margin:12px 0;color:#44403c;">Clique no botão abaixo pra criar sua senha e acessar sua própria agenda.</p>
+		<p style="margin:20px 0;"><a href="%s" style="display:inline-block;background:%s;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;">Criar minha conta</a></p>
+		<p style="font-size:12px;color:#a8a29e;margin-top:16px;word-break:break-all;">Ou acesse: %s</p>`,
+		estabelecimento.Nome, link, corPrimaria, link,
+	)
+	return envelope("Convite para "+estabelecimento.Nome, corpo)
+}
+
 func emailCancelamentoHTML(estabelecimento models.Estabelecimento, agendamento models.Agendamento, dataFormatada string) string {
 	corpo := fmt.Sprintf(
 		`<p style="font-size:15px;margin:0 0 4px;">Olá, %s.</p>

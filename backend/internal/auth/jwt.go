@@ -5,11 +5,14 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"agendamento/backend/internal/models"
 )
 
 type Claims struct {
-	UsuarioID         uint `json:"usuario_id"`
-	EstabelecimentoID uint `json:"estabelecimento_id"`
+	UsuarioID         uint                `json:"usuario_id"`
+	EstabelecimentoID uint                `json:"estabelecimento_id"`
+	Papel             models.PapelUsuario `json:"papel"`
 	jwt.RegisteredClaims
 }
 
@@ -22,10 +25,14 @@ func NovoGerenciador(segredo string) *Gerenciador {
 }
 
 // GerarToken cria uma sessão de 30 dias para o usuário no seu estabelecimento.
-func (g *Gerenciador) GerarToken(usuarioID, estabelecimentoID uint) (string, error) {
+// O papel vai embutido no token pra middleware e handlers saberem, sem ida
+// extra ao banco, se quem está logado é o dono ou um profissional auxiliar
+// (que tem acesso restrito — ver auth.ExigirDono).
+func (g *Gerenciador) GerarToken(usuarioID, estabelecimentoID uint, papel models.PapelUsuario) (string, error) {
 	claims := Claims{
 		UsuarioID:         usuarioID,
 		EstabelecimentoID: estabelecimentoID,
+		Papel:             papel,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(30 * 24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

@@ -6,6 +6,7 @@ import { DadosEstabelecimentoForm } from "@/components/configuracoes/DadosEstabe
 import { HorarioFuncionamentoEditor } from "@/components/configuracoes/HorarioFuncionamentoEditor"
 import { LogoUploadField } from "@/components/configuracoes/LogoUploadField"
 import { WhatsAppIntegracaoCard } from "@/components/configuracoes/WhatsAppIntegracaoCard"
+import { AvisoEditor } from "@/components/configuracoes/AvisoEditor"
 import { Button } from "@/components/ui/button"
 
 export function ConfiguracoesPage() {
@@ -16,6 +17,7 @@ export function ConfiguracoesPage() {
     atualizarDados,
     atualizarHorario,
     atualizarLogo,
+    atualizarAviso,
   } = useEstabelecimento()
 
   const linkPublico = estabelecimento ? `${window.location.origin}/${estabelecimento.slug}` : ""
@@ -85,6 +87,25 @@ export function ConfiguracoesPage() {
             <HorarioFuncionamentoEditor
               horarios={estabelecimento.horario_funcionamento}
               onAtualizar={atualizarHorario}
+            />
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="font-heading font-medium">Aviso / anúncio</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Uma faixa chamativa e opcional na página de agendamento — pra promoções ou avisos, sem
+          atrapalhar o cliente a agendar.
+        </p>
+        <div className="mt-4">
+          {loading || !estabelecimento ? (
+            <p className="text-sm text-muted-foreground">Carregando...</p>
+          ) : (
+            <AvisoEditor
+              ativo={estabelecimento.aviso_ativo}
+              texto={estabelecimento.aviso_texto}
+              onAtualizar={atualizarAviso}
             />
           )}
         </div>

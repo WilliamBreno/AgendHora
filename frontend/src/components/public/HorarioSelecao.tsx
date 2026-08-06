@@ -7,6 +7,7 @@ import type { Servico } from "@/types"
 interface HorarioSelecaoProps {
   slug: string
   servico: Servico
+  profissionalId: number
   data: string
   hora: string
   onDataChange: (data: string) => void
@@ -16,12 +17,13 @@ interface HorarioSelecaoProps {
 export function HorarioSelecao({
   slug,
   servico,
+  profissionalId,
   data,
   hora,
   onDataChange,
   onHoraChange,
 }: HorarioSelecaoProps) {
-  const { horarios, loading } = useDisponibilidade(slug, servico.id, data)
+  const { horarios, loading } = useDisponibilidade(slug, servico.id, profissionalId, data)
 
   return (
     <div className="flex flex-col gap-4">

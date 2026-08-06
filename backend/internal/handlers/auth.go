@@ -26,10 +26,12 @@ func NewAuthHandler(db *gorm.DB, gerenciador *auth.Gerenciador) *AuthHandler {
 type sessaoResponse struct {
 	Token           string                 `json:"token"`
 	Estabelecimento models.Estabelecimento `json:"estabelecimento"`
+	Usuario         models.Usuario         `json:"usuario"`
 }
 
 type registroInput struct {
 	NomeEstabelecimento string `json:"nome_estabelecimento" binding:"required"`
+	Nome                string `json:"nome" binding:"required"`
 	Email               string `json:"email" binding:"required,email"`
 	Senha               string `json:"senha" binding:"required,min=6"`
 }
@@ -77,8 +79,10 @@ func (h *AuthHandler) Registro(c *gin.Context) {
 	}
 
 	usuario := models.Usuario{
+		Nome:              strings.TrimSpace(input.Nome),
 		Email:             email,
 		SenhaHash:         senhaHash,
+		Papel:             models.PapelDono,
 		EstabelecimentoID: estabelecimento.ID,
 	}
 	err = h.DB.Transaction(func(tx *gorm.DB) error {
@@ -93,13 +97,13 @@ func (h *AuthHandler) Registro(c *gin.Context) {
 		return
 	}
 
-	token, err := h.Gerenciador.GerarToken(usuario.ID, estabelecimento.ID)
+	token, err := h.Gerenciador.GerarToken(usuario.ID, estabelecimento.ID, usuario.Papel)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao gerar sessão"})
 		return
 	}
 
-	c.JSON(http.StatusCreated, sessaoResponse{Token: token, Estabelecimento: estabelecimento})
+	c.JSON(http.StatusCreated, sessaoResponse{Token: token, Estabelecimento: estabelecimento, Usuario: usuario})
 }
 
 type loginInput struct {
@@ -129,11 +133,28 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	token, err := h.Gerenciador.GerarToken(usuario.ID, estabelecimento.ID)
+	token, err := h.Gerenciador.GerarToken(usuario.ID, estabelecimento.ID, usuario.Papel)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao gerar sessão"})
 		return
 	}
 
-	c.JSON(http.StatusOK, sessaoResponse{Token: token, Estabelecimento: estabelecimento})
+	c.JSON(http.StatusOK, sessaoResponse{Token: token, Estabelecimento: estabelecimento, Usuario: usuario})
+}
+
+// Sessao retorna estabelecimento + usuário logado — usado no boot do
+// frontend (refresh de página) pra recuperar quem está logado e seu papel
+// sem precisar guardar isso solto no localStorage.
+func (h *AuthHandler) Sessao(c *gin.Context) {
+	var usuario models.Usuario
+	if err := h.DB.First(&usuario, auth.UsuarioID(c)).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao buscar usuário"})
+		return
+	}
+	var estabelecimento models.Estabelecimento
+	if err := h.DB.First(&estabelecimento, auth.EstabelecimentoID(c)).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao buscar estabelecimento"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"estabelecimento": estabelecimento, "usuario": usuario})
 }

@@ -60,6 +60,8 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 	agendamentoHandler := handlers.NewAgendamentoHandler(db, notificador)
 	disponibilidadeHandler := handlers.NewDisponibilidadeHandler(db)
 	dashboardHandler := handlers.NewDashboardHandler(db)
+	profissionalHandler := handlers.NewProfissionalHandler(db, gerenciador, notificador)
+	usuarioHandler := handlers.NewUsuarioHandler(db)
 
 	apiGroup := router.Group("/api")
 	{
@@ -69,20 +71,44 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 			authGroup.POST("/login", authHandler.Login)
 		}
 
+		// /convites não fica sob /admin (quem acessa ainda não tem conta) nem
+		// sob /publico/:slug (o token já identifica a empresa sozinho).
+		conviteGroup := apiGroup.Group("/convites")
+		{
+			conviteGroup.GET("/:token", profissionalHandler.VerConvite)
+			conviteGroup.POST("/:token/aceitar", profissionalHandler.AceitarConvite)
+		}
+
 		admin := apiGroup.Group("/admin")
 		admin.Use(authpkg.Middleware(gerenciador))
 		{
+			admin.GET("/sessao", authHandler.Sessao)
+
 			admin.GET("/servicos", servicoHandler.List)
 			admin.POST("/servicos", servicoHandler.Create)
 			admin.GET("/servicos/:id", servicoHandler.Get)
 			admin.PUT("/servicos/:id", servicoHandler.Update)
 			admin.DELETE("/servicos/:id", servicoHandler.Delete)
 
+			// GET fica liberado pro auxiliar (precisa dos ícones/dados básicos
+			// pra usar Serviços); as edições são só do dono — é o que fica de
+			// fora do que o auxiliar acessa (não existe "área de configurações"
+			// pra ele).
 			admin.GET("/estabelecimento", estabelecimentoHandler.Get)
-			admin.PUT("/estabelecimento", estabelecimentoHandler.AtualizarDados)
-			admin.PUT("/estabelecimento/icones", estabelecimentoHandler.AtualizarIcones)
-			admin.PUT("/estabelecimento/horario", estabelecimentoHandler.AtualizarHorario)
-			admin.PUT("/estabelecimento/logo", estabelecimentoHandler.AtualizarLogo)
+			admin.PUT("/estabelecimento", authpkg.ExigirDono(), estabelecimentoHandler.AtualizarDados)
+			admin.PUT("/estabelecimento/icones", authpkg.ExigirDono(), estabelecimentoHandler.AtualizarIcones)
+			admin.PUT("/estabelecimento/horario", authpkg.ExigirDono(), estabelecimentoHandler.AtualizarHorario)
+			admin.PUT("/estabelecimento/logo", authpkg.ExigirDono(), estabelecimentoHandler.AtualizarLogo)
+			admin.PUT("/estabelecimento/aviso", authpkg.ExigirDono(), estabelecimentoHandler.AtualizarAviso)
+
+			// só o dono convida/vê a equipe — um auxiliar não pode cadastrar
+			// outro profissional.
+			admin.GET("/profissionais", authpkg.ExigirDono(), profissionalHandler.Listar)
+			admin.POST("/profissionais/convidar", authpkg.ExigirDono(), profissionalHandler.Convidar)
+
+			// cada profissional (dono ou auxiliar) edita só o próprio horário
+			// de trabalho + intervalo de descanso.
+			admin.PUT("/usuario/horario", usuarioHandler.AtualizarHorario)
 
 			admin.GET("/agendamentos", agendamentoHandler.List)
 			admin.POST("/agendamentos", agendamentoHandler.Create)
@@ -99,6 +125,7 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 		{
 			publico.GET("/estabelecimento", estabelecimentoHandler.GetPublico)
 			publico.GET("/servicos", servicoHandler.List)
+			publico.GET("/profissionais", profissionalHandler.ListarPublico)
 			publico.GET("/disponibilidade", disponibilidadeHandler.Listar)
 
 			publico.POST("/agendamentos", agendamentoHandler.CreatePublico)

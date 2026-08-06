@@ -123,8 +123,11 @@ export function ServicoFormDialog({
                   type="number"
                   min={0}
                   step="0.01"
-                  value={form.preco}
-                  onChange={(e) => setForm((f) => ({ ...f, preco: Number(e.target.value) }))}
+                  value={form.preco === 0 ? "" : form.preco}
+                  placeholder="0,00"
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, preco: e.target.value === "" ? 0 : Number(e.target.value) }))
+                  }
                 />
               </div>
               <div className="grid gap-1.5">

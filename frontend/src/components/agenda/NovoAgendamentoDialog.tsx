@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 import { toast } from "sonner"
 import {
   Dialog,
@@ -19,13 +19,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useAuth } from "@/contexts/AuthContext"
 import { ApiError } from "@/lib/api"
-import type { AgendamentoInput, Servico } from "@/types"
+import type { AgendamentoInput, Servico, Usuario } from "@/types"
 
 interface NovoAgendamentoDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   servicos: Servico[]
+  profissionais: Usuario[]
   onCriar: (input: AgendamentoInput) => Promise<unknown>
 }
 
@@ -33,6 +35,7 @@ const FORM_VAZIO: AgendamentoInput = {
   cliente_nome: "",
   cliente_telefone: "",
   servico_id: 0,
+  profissional_id: 0,
   data: "",
   hora: "",
   observacoes: "",
@@ -42,8 +45,15 @@ export function NovoAgendamentoDialog({
   open,
   onOpenChange,
   servicos,
+  profissionais,
   onCriar,
 }: NovoAgendamentoDialogProps) {
+  const { usuario } = useAuth()
+  // só mostra o seletor quando há de fato uma escolha (dono com equipe); com
+  // um profissional só, o agendamento vai automaticamente pra ele.
+  const exigeEscolhaProfissional = profissionais.length > 1
+  const profissionalUnico = profissionais.length === 1 ? profissionais[0].id : (usuario?.id ?? 0)
+
   const [form, setForm] = useState<AgendamentoInput>(FORM_VAZIO)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
@@ -52,10 +62,15 @@ export function NovoAgendamentoDialog({
   const [conflito, setConflito] = useState(false)
 
   function resetar() {
-    setForm(FORM_VAZIO)
+    setForm({ ...FORM_VAZIO, profissional_id: exigeEscolhaProfissional ? 0 : profissionalUnico })
     setErro(null)
     setConflito(false)
   }
+
+  useEffect(() => {
+    if (open) resetar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   function atualizarCampo<K extends keyof AgendamentoInput>(campo: K, valor: AgendamentoInput[K]) {
     setForm((f) => ({ ...f, [campo]: valor }))
@@ -94,6 +109,10 @@ export function NovoAgendamentoDialog({
     }
     if (!form.servico_id) {
       setErro("Selecione um serviço.")
+      return
+    }
+    if (!form.profissional_id) {
+      setErro("Selecione o profissional.")
       return
     }
     if (!form.data || !form.hora) {
@@ -165,6 +184,32 @@ export function NovoAgendamentoDialog({
                 </SelectContent>
               </Select>
             </div>
+
+            {exigeEscolhaProfissional && (
+              <div className="grid gap-1.5">
+                <Label>Profissional</Label>
+                <Select
+                  value={form.profissional_id ? String(form.profissional_id) : ""}
+                  onValueChange={(value) => atualizarCampo("profissional_id", Number(value))}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecione o profissional">
+                      {(value: string | null) => {
+                        const profissional = profissionais.find((p) => String(p.id) === value)
+                        return profissional ? profissional.nome : null
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {profissionais.map((p) => (
+                      <SelectItem key={p.id} value={String(p.id)}>
+                        {p.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-1.5">

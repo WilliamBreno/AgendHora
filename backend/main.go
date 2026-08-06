@@ -15,8 +15,9 @@ func main() {
 	db := database.Connect(cfg.DatabaseURL)
 	database.Migrate(db)
 	database.MigrarSlugsLegados(db)
+	database.MigrarProfissionais(db)
 
-	notificador := notifications.New(cfg.ResendAPIKey, cfg.ResendFrom)
+	notificador := notifications.New(cfg.ResendAPIKey, cfg.ResendFrom, cfg.FrontendURL)
 
 	router := api.NewRouter(db, cfg.JWTSecret, notificador, cfg.AllowedOrigins)
 

@@ -1,12 +1,22 @@
 import { useMemo, useState } from "react"
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react"
+import { ChevronLeft, ChevronRight, Clock, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { CalendarioMensal } from "@/components/agenda/CalendarioMensal"
 import { AgendamentoDetailPanel } from "@/components/agenda/AgendamentoDetailPanel"
 import { NovoAgendamentoDialog } from "@/components/agenda/NovoAgendamentoDialog"
+import { MeuHorarioDialog } from "@/components/agenda/MeuHorarioDialog"
 import { useAgendamentos } from "@/hooks/useAgendamentos"
 import { useServicos } from "@/hooks/useServicos"
+import { useEquipe } from "@/hooks/useEquipe"
+import { useAuth } from "@/contexts/AuthContext"
 import {
   dataDeHoje,
   descricaoHojePorExtenso,
@@ -18,18 +28,23 @@ import { ApiError } from "@/lib/api"
 import type { Agendamento } from "@/types"
 
 export function AgendaPage() {
+  const { ehDono } = useAuth()
   const hoje = dataDeHoje()
   const [ano, setAno] = useState(hoje.ano)
   const [mes, setMes] = useState(hoje.mes)
   const [agendamentoSelecionado, setAgendamentoSelecionado] = useState<Agendamento | null>(null)
   const [novoAberto, setNovoAberto] = useState(false)
+  const [meuHorarioAberto, setMeuHorarioAberto] = useState(false)
+  const [profissionalFiltro, setProfissionalFiltro] = useState<number | null>(null)
 
   const semanas = useMemo(() => gerarGradeMensal(ano, mes), [ano, mes])
   const inicio = semanas[0][0].data
   const fim = semanas[5][6].data
 
-  const { agendamentos, loading, cancelar, criar } = useAgendamentos(inicio, fim)
+  const { equipe } = useEquipe(ehDono)
+  const { agendamentos, loading, cancelar, criar } = useAgendamentos(inicio, fim, profissionalFiltro)
   const { servicos } = useServicos()
+  const profissionais = equipe?.profissionais ?? []
 
   const agendamentosPorDia = useMemo(() => {
     const mapa: Record<string, Agendamento[]> = {}
@@ -84,7 +99,36 @@ export function AgendaPage() {
             <p className="text-sm text-muted-foreground">{descricaoHojePorExtenso()}</p>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {ehDono && profissionais.length > 1 && (
+            <Select
+              value={profissionalFiltro ? String(profissionalFiltro) : "todos"}
+              onValueChange={(v) => setProfissionalFiltro(v === "todos" ? null : Number(v))}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Toda a equipe">
+                  {(value: string | null) => {
+                    if (!value || value === "todos") return "Toda a equipe"
+                    return profissionais.find((p) => String(p.id) === value)?.nome ?? null
+                  }}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Toda a equipe</SelectItem>
+                {profissionais.map((p) => (
+                  <SelectItem key={p.id} value={String(p.id)}>
+                    {p.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {!ehDono && (
+            <Button variant="outline" size="sm" onClick={() => setMeuHorarioAberto(true)}>
+              <Clock className="size-4" />
+              Meu horário
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={irParaHoje}>
             Hoje
           </Button>
@@ -123,8 +167,13 @@ export function AgendaPage() {
         open={novoAberto}
         onOpenChange={setNovoAberto}
         servicos={servicos}
+        profissionais={profissionais}
         onCriar={criar}
       />
+
+      {!ehDono && (
+        <MeuHorarioDialog open={meuHorarioAberto} onOpenChange={setMeuHorarioAberto} />
+      )}
     </div>
   )
 }

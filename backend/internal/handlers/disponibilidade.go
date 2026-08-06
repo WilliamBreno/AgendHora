@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -30,13 +29,19 @@ func formatarMinutos(min int) string {
 	return time.Date(0, 1, 1, min/60, min%60, 0, 0, time.UTC).Format("15:04")
 }
 
-// Listar calcula os horários livres de um serviço num dia, a partir do
-// horário de funcionamento do estabelecimento naquele dia da semana e dos
-// agendamentos confirmados já existentes.
+// Listar calcula os horários livres de um serviço num dia, pra um
+// profissional específico — a partir do horário de trabalho dele naquele
+// dia da semana (com intervalo de descanso, se houver) e dos agendamentos
+// confirmados que já tem na própria agenda.
 func (h *DisponibilidadeHandler) Listar(c *gin.Context) {
 	servicoID, err := strconv.ParseUint(c.Query("servico_id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "parâmetro 'servico_id' inválido"})
+		return
+	}
+	profissionalID, err := strconv.ParseUint(c.Query("profissional_id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "parâmetro 'profissional_id' inválido"})
 		return
 	}
 	data, err := time.Parse("2006-01-02", c.Query("data"))
@@ -58,16 +63,24 @@ func (h *DisponibilidadeHandler) Listar(c *gin.Context) {
 		return
 	}
 
+	var profissional models.Usuario
+	err = h.DB.Where("id = ? AND estabelecimento_id = ?", profissionalID, estabelecimentoID).First(&profissional).Error
+	if err == gorm.ErrRecordNotFound {
+		c.JSON(http.StatusNotFound, gin.H{"error": "profissional não encontrado"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao buscar profissional"})
+		return
+	}
+
 	var estabelecimento models.Estabelecimento
 	if err := h.DB.First(&estabelecimento, estabelecimentoID).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao buscar estabelecimento"})
 		return
 	}
 
-	var horarios models.HorarioFuncionamento
-	if err := json.Unmarshal(estabelecimento.HorarioFuncionamento, &horarios); err != nil {
-		horarios = models.HorarioFuncionamento{}
-	}
+	horarios := horarioDoProfissional(estabelecimento, profissional)
 
 	diaSemana := models.DiasSemana[int(data.Weekday())]
 	horarioDia, configurado := horarios[diaSemana]
@@ -83,7 +96,7 @@ func (h *DisponibilidadeHandler) Listar(c *gin.Context) {
 		return
 	}
 
-	ocupados, err := intervalosOcupados(h.DB, estabelecimentoID, data, 0)
+	ocupados, err := intervalosOcupados(h.DB, estabelecimentoID, uint(profissionalID), data, 0)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao verificar disponibilidade"})
 		return
@@ -102,6 +115,9 @@ func (h *DisponibilidadeHandler) Listar(c *gin.Context) {
 			continue
 		}
 		fim := inicio + servico.DuracaoMin
+		if sobrepoeIntervalo(inicio, fim, horarioDia) {
+			continue
+		}
 		livre := true
 		for _, o := range ocupados {
 			if sobrepoe(inicio, fim, o.inicio, o.fim) {

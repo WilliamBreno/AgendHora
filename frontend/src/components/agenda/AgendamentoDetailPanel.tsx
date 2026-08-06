@@ -83,6 +83,12 @@ export function AgendamentoDetailPanel({
               </div>
 
               <dl className="flex flex-col gap-2 text-sm">
+                {agendamento.profissional_nome && (
+                  <div className="flex justify-between">
+                    <dt className="text-muted-foreground">Profissional</dt>
+                    <dd className="font-medium">{agendamento.profissional_nome}</dd>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground">Data</dt>
                   <dd className="font-medium">{formatarDataExibicao(agendamento.data)}</dd>

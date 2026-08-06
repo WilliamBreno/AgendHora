@@ -8,10 +8,20 @@ var DiasSemana = []string{
 }
 
 // HorarioDia é um dia de HorarioFuncionamento: {"abre":"09:00","fecha":"18:00","fechado":false}.
+// IntervaloInicio/IntervaloFim são opcionais (ambos vazios = sem intervalo
+// configurado nesse dia) e marcam um horário de descanso — ex: almoço — em
+// que o motor de disponibilidade não oferece horário pro cliente agendar.
 type HorarioDia struct {
-	Abre    string `json:"abre"`
-	Fecha   string `json:"fecha"`
-	Fechado bool   `json:"fechado"`
+	Abre            string `json:"abre"`
+	Fecha           string `json:"fecha"`
+	Fechado         bool   `json:"fechado"`
+	IntervaloInicio string `json:"intervalo_inicio,omitempty"`
+	IntervaloFim    string `json:"intervalo_fim,omitempty"`
+}
+
+// TemIntervalo indica se o dia tem um intervalo de descanso configurado.
+func (h HorarioDia) TemIntervalo() bool {
+	return h.IntervaloInicio != "" && h.IntervaloFim != ""
 }
 
 // HorarioFuncionamento é o valor decodificado de Estabelecimento.HorarioFuncionamento.

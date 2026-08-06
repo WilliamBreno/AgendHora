@@ -28,6 +28,7 @@ type agendamentoInput struct {
 	ClienteTelefone string `json:"cliente_telefone" binding:"required"`
 	ClienteEmail    string `json:"cliente_email"`
 	ServicoID       uint   `json:"servico_id" binding:"required"`
+	ProfissionalID  uint   `json:"profissional_id" binding:"required"`
 	Data            string `json:"data" binding:"required"` // "2006-01-02"
 	Hora            string `json:"hora" binding:"required"` // "15:04"
 	Observacoes     string `json:"observacoes"`
@@ -47,6 +48,8 @@ type agendamentoResponse struct {
 	ClienteEmail      string                   `json:"cliente_email"`
 	ServicoID         uint                     `json:"servico_id"`
 	Servico           models.Servico           `json:"servico"`
+	ProfissionalID    uint                     `json:"profissional_id"`
+	ProfissionalNome  string                   `json:"profissional_nome"`
 	Data              string                   `json:"data"`
 	Hora              string                   `json:"hora"`
 	Status            models.StatusAgendamento `json:"status"`
@@ -65,6 +68,8 @@ func toAgendamentoResponse(a models.Agendamento) agendamentoResponse {
 		ClienteEmail:      a.ClienteEmail,
 		ServicoID:         a.ServicoID,
 		Servico:           a.Servico,
+		ProfissionalID:    a.ProfissionalID,
+		ProfissionalNome:  a.Profissional.Nome,
 		Data:              a.Data.Format("2006-01-02"),
 		Hora:              a.Hora,
 		Status:            a.Status,
@@ -106,12 +111,17 @@ func sobrepoe(aInicio, aFim, bInicio, bFim int) bool {
 }
 
 // intervalosOcupados lista, em minutos desde 00:00, os horários já tomados
-// por agendamentos confirmados do estabelecimento naquele dia. ignorarID
-// exclui o próprio registro (útil ao reagendar). Função livre (não presa a
-// AgendamentoHandler) porque o motor de disponibilidade também precisa dela.
-func intervalosOcupados(db *gorm.DB, estabelecimentoID uint, data time.Time, ignorarID uint) ([]intervaloOcupado, error) {
+// por agendamentos confirmados de UM profissional naquele dia — cada
+// profissional tem sua própria agenda, então o de outro colega não conta
+// como conflito. ignorarID exclui o próprio registro (útil ao reagendar).
+// Função livre (não presa a AgendamentoHandler) porque o motor de
+// disponibilidade também precisa dela.
+func intervalosOcupados(db *gorm.DB, estabelecimentoID, profissionalID uint, data time.Time, ignorarID uint) ([]intervaloOcupado, error) {
 	query := db.Preload("Servico").
-		Where("estabelecimento_id = ? AND data = ? AND status = ?", estabelecimentoID, data, models.StatusConfirmado)
+		Where(
+			"estabelecimento_id = ? AND profissional_id = ? AND data = ? AND status = ?",
+			estabelecimentoID, profissionalID, data, models.StatusConfirmado,
+		)
 	if ignorarID != 0 {
 		query = query.Where("id <> ?", ignorarID)
 	}
@@ -133,17 +143,16 @@ func intervalosOcupados(db *gorm.DB, estabelecimentoID uint, data time.Time, ign
 }
 
 // haConflito verifica se [hora, hora+duracaoMin) esbarra em algum agendamento
-// confirmado já existente naquele dia. A checagem é por estabelecimento
-// inteiro, não por serviço: a v1 assume um único profissional/recurso
-// atendendo por vez.
-func (h *AgendamentoHandler) haConflito(estabelecimentoID uint, data time.Time, hora string, duracaoMin int, ignorarID uint) (bool, error) {
+// confirmado já existente naquele dia NA AGENDA DESSE PROFISSIONAL — cada
+// profissional (dono ou auxiliar) tem sua própria agenda independente.
+func (h *AgendamentoHandler) haConflito(estabelecimentoID, profissionalID uint, data time.Time, hora string, duracaoMin int, ignorarID uint) (bool, error) {
 	inicio, err := minutosDoDia(hora)
 	if err != nil {
 		return false, err
 	}
 	fim := inicio + duracaoMin
 
-	ocupados, err := intervalosOcupados(h.DB, estabelecimentoID, data, ignorarID)
+	ocupados, err := intervalosOcupados(h.DB, estabelecimentoID, profissionalID, data, ignorarID)
 	if err != nil {
 		return false, err
 	}
@@ -156,7 +165,16 @@ func (h *AgendamentoHandler) haConflito(estabelecimentoID uint, data time.Time, 
 }
 
 func (h *AgendamentoHandler) List(c *gin.Context) {
-	query := h.DB.Preload("Servico").Where("estabelecimento_id = ?", auth.EstabelecimentoID(c))
+	query := h.DB.Preload("Servico").Preload("Profissional").
+		Where("estabelecimento_id = ?", auth.EstabelecimentoID(c))
+
+	// um auxiliar só vê a própria agenda, nunca a dos colegas; o dono vê
+	// tudo por padrão e pode filtrar por profissional_id se quiser.
+	if auth.Papel(c) == models.PapelAuxiliar {
+		query = query.Where("profissional_id = ?", auth.UsuarioID(c))
+	} else if profissionalIDStr := c.Query("profissional_id"); profissionalIDStr != "" {
+		query = query.Where("profissional_id = ?", profissionalIDStr)
+	}
 
 	if inicioStr := c.Query("inicio"); inicioStr != "" {
 		inicio, err := time.Parse("2006-01-02", inicioStr)
@@ -198,7 +216,7 @@ func (h *AgendamentoHandler) MeusAgendamentos(c *gin.Context) {
 	}
 
 	var agendamentos []models.Agendamento
-	err := h.DB.Preload("Servico").
+	err := h.DB.Preload("Servico").Preload("Profissional").
 		Where(
 			"estabelecimento_id = ? AND regexp_replace(cliente_telefone, '[^0-9]', '', 'g') = ?",
 			auth.EstabelecimentoID(c), telefone,
@@ -217,7 +235,12 @@ func (h *AgendamentoHandler) MeusAgendamentos(c *gin.Context) {
 	c.JSON(http.StatusOK, respostas)
 }
 
-func (h *AgendamentoHandler) criar(c *gin.Context, permitirEncaixe bool) {
+// criar cria um agendamento. permitirAdmin habilita comportamento exclusivo
+// do painel admin: aceitar encaixe e, se quem está logado é um auxiliar,
+// forçar o agendamento pra própria agenda dele (não pode agendar em nome de
+// outro profissional). Na rota pública, o profissional vem sempre do que o
+// cliente escolheu no formulário.
+func (h *AgendamentoHandler) criar(c *gin.Context, permitirAdmin bool) {
 	estabelecimentoID := auth.EstabelecimentoID(c)
 
 	var input agendamentoInput
@@ -248,12 +271,25 @@ func (h *AgendamentoHandler) criar(c *gin.Context, permitirEncaixe bool) {
 		return
 	}
 
-	conflito, err := h.haConflito(estabelecimentoID, data, input.Hora, servico.DuracaoMin, 0)
+	profissionalID := input.ProfissionalID
+	if permitirAdmin && auth.Papel(c) == models.PapelAuxiliar {
+		profissionalID = auth.UsuarioID(c)
+	}
+	var totalProfissional int64
+	h.DB.Model(&models.Usuario{}).
+		Where("id = ? AND estabelecimento_id = ?", profissionalID, estabelecimentoID).
+		Count(&totalProfissional)
+	if totalProfissional == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "profissional não encontrado"})
+		return
+	}
+
+	conflito, err := h.haConflito(estabelecimentoID, profissionalID, data, input.Hora, servico.DuracaoMin, 0)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao verificar disponibilidade"})
 		return
 	}
-	encaixe := conflito && permitirEncaixe && input.Encaixe
+	encaixe := conflito && permitirAdmin && input.Encaixe
 	if conflito && !encaixe {
 		c.JSON(http.StatusConflict, gin.H{"error": "horário indisponível"})
 		return
@@ -264,6 +300,7 @@ func (h *AgendamentoHandler) criar(c *gin.Context, permitirEncaixe bool) {
 		ClienteTelefone:   strings.TrimSpace(input.ClienteTelefone),
 		ClienteEmail:      strings.TrimSpace(input.ClienteEmail),
 		ServicoID:         input.ServicoID,
+		ProfissionalID:    profissionalID,
 		Data:              data,
 		Hora:              input.Hora,
 		Status:            models.StatusConfirmado,
@@ -276,6 +313,7 @@ func (h *AgendamentoHandler) criar(c *gin.Context, permitirEncaixe bool) {
 		return
 	}
 	agendamento.Servico = servico
+	h.DB.First(&agendamento.Profissional, profissionalID)
 
 	if h.Notificador != nil {
 		var estabelecimento models.Estabelecimento
@@ -307,7 +345,7 @@ func (h *AgendamentoHandler) buscarAgendamento(c *gin.Context) (*models.Agendame
 	}
 
 	var agendamento models.Agendamento
-	err = h.DB.Preload("Servico").
+	err = h.DB.Preload("Servico").Preload("Profissional").
 		Where("id = ? AND estabelecimento_id = ?", id, auth.EstabelecimentoID(c)).
 		First(&agendamento).Error
 	if err == gorm.ErrRecordNotFound {
@@ -324,6 +362,10 @@ func (h *AgendamentoHandler) buscarAgendamento(c *gin.Context) (*models.Agendame
 func (h *AgendamentoHandler) Get(c *gin.Context) {
 	agendamento, ok := h.buscarAgendamento(c)
 	if !ok {
+		return
+	}
+	if auth.Papel(c) == models.PapelAuxiliar && agendamento.ProfissionalID != auth.UsuarioID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "você só pode ver agendamentos da sua própria agenda"})
 		return
 	}
 	c.JSON(http.StatusOK, toAgendamentoResponse(*agendamento))
@@ -351,10 +393,15 @@ func (h *AgendamentoHandler) cancelar(c *gin.Context, agendamento *models.Agenda
 }
 
 // Cancelar é a ação do painel admin (aceitar/recusar ficam para quando o
-// interruptor opcional de aprovação manual existir).
+// interruptor opcional de aprovação manual existir). Um auxiliar só pode
+// cancelar agendamento da própria agenda, nunca da de um colega.
 func (h *AgendamentoHandler) Cancelar(c *gin.Context) {
 	agendamento, ok := h.buscarAgendamento(c)
 	if !ok {
+		return
+	}
+	if auth.Papel(c) == models.PapelAuxiliar && agendamento.ProfissionalID != auth.UsuarioID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "você só pode cancelar agendamentos da sua própria agenda"})
 		return
 	}
 	h.cancelar(c, agendamento)

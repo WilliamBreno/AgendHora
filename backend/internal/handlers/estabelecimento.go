@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"regexp"
 	"slices"
@@ -35,11 +36,13 @@ func (h *EstabelecimentoHandler) Get(c *gin.Context) {
 }
 
 type estabelecimentoPublicoResponse struct {
-	Nome     string `json:"nome"`
-	Slug     string `json:"slug"`
-	Logo     string `json:"logo"`
-	Telefone string `json:"telefone"`
-	Endereco string `json:"endereco"`
+	Nome       string `json:"nome"`
+	Slug       string `json:"slug"`
+	Logo       string `json:"logo"`
+	Telefone   string `json:"telefone"`
+	Endereco   string `json:"endereco"`
+	AvisoAtivo bool   `json:"aviso_ativo"`
+	AvisoTexto string `json:"aviso_texto"`
 }
 
 // GetPublico retorna só o que a página de agendamento do cliente precisa
@@ -51,11 +54,13 @@ func (h *EstabelecimentoHandler) GetPublico(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, estabelecimentoPublicoResponse{
-		Nome:     estabelecimento.Nome,
-		Slug:     estabelecimento.Slug,
-		Logo:     estabelecimento.Logo,
-		Telefone: estabelecimento.Telefone,
-		Endereco: estabelecimento.Endereco,
+		Nome:       estabelecimento.Nome,
+		Slug:       estabelecimento.Slug,
+		Logo:       estabelecimento.Logo,
+		Telefone:   estabelecimento.Telefone,
+		Endereco:   estabelecimento.Endereco,
+		AvisoAtivo: estabelecimento.AvisoAtivo,
+		AvisoTexto: estabelecimento.AvisoTexto,
 	})
 }
 
@@ -96,6 +101,44 @@ type horarioInput struct {
 	Horarios map[string]models.HorarioDia `json:"horarios"`
 }
 
+// validarHorarios confere cada dia informado — abre/fecha obrigatórios
+// quando não está fechado, e o intervalo de descanso (opcional) precisa
+// caber dentro do abre-fecha do dia. Compartilhada entre o horário geral do
+// estabelecimento e o horário individual de cada profissional.
+func validarHorarios(horarios map[string]models.HorarioDia) error {
+	for dia, horario := range horarios {
+		if !slices.Contains(models.DiasSemana, dia) {
+			return errors.New("dia da semana inválido: " + dia)
+		}
+		if horario.Fechado {
+			continue
+		}
+		abre, err := minutosDoDia(horario.Abre)
+		if err != nil {
+			return errors.New("horário de abertura inválido em " + dia)
+		}
+		fecha, err := minutosDoDia(horario.Fecha)
+		if err != nil {
+			return errors.New("horário de fechamento inválido em " + dia)
+		}
+		if horario.IntervaloInicio == "" && horario.IntervaloFim == "" {
+			continue
+		}
+		intervaloInicio, err := minutosDoDia(horario.IntervaloInicio)
+		if err != nil {
+			return errors.New("início do intervalo inválido em " + dia)
+		}
+		intervaloFim, err := minutosDoDia(horario.IntervaloFim)
+		if err != nil {
+			return errors.New("fim do intervalo inválido em " + dia)
+		}
+		if intervaloInicio >= intervaloFim || intervaloInicio < abre || intervaloFim > fecha {
+			return errors.New("intervalo de descanso precisa estar dentro do horário de funcionamento em " + dia)
+		}
+	}
+	return nil
+}
+
 // AtualizarHorario substitui o horário de funcionamento por dia da semana,
 // usado pelo motor de disponibilidade da página pública.
 func (h *EstabelecimentoHandler) AtualizarHorario(c *gin.Context) {
@@ -105,22 +148,9 @@ func (h *EstabelecimentoHandler) AtualizarHorario(c *gin.Context) {
 		return
 	}
 
-	for dia, horario := range input.Horarios {
-		if !slices.Contains(models.DiasSemana, dia) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "dia da semana inválido: " + dia})
-			return
-		}
-		if horario.Fechado {
-			continue
-		}
-		if _, err := minutosDoDia(horario.Abre); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "horário de abertura inválido em " + dia})
-			return
-		}
-		if _, err := minutosDoDia(horario.Fecha); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "horário de fechamento inválido em " + dia})
-			return
-		}
+	if err := validarHorarios(input.Horarios); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
 	dados, err := json.Marshal(input.Horarios)
@@ -212,4 +242,30 @@ func (h *EstabelecimentoHandler) AtualizarLogo(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"logo": input.Logo})
+}
+
+type avisoInput struct {
+	Ativo bool   `json:"ativo"`
+	Texto string `json:"texto"`
+}
+
+// AtualizarAviso liga/desliga e edita o aviso/anúncio chamativo que aparece
+// como uma faixa no topo da página pública — nunca bloqueia o agendamento,
+// o cliente pode fechá-la.
+func (h *EstabelecimentoHandler) AtualizarAviso(c *gin.Context) {
+	var input avisoInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	texto := strings.TrimSpace(input.Texto)
+	err := h.DB.Model(&models.Estabelecimento{}).
+		Where("id = ?", auth.EstabelecimentoID(c)).
+		Updates(map[string]any{"aviso_ativo": input.Ativo && texto != "", "aviso_texto": texto}).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao atualizar aviso"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"aviso_ativo": input.Ativo && texto != "", "aviso_texto": texto})
 }

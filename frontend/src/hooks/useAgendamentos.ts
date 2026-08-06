@@ -3,21 +3,24 @@ import { toast } from "sonner"
 import { apiAdmin, ApiError } from "@/lib/api"
 import type { Agendamento, AgendamentoInput } from "@/types"
 
-export function useAgendamentos(inicio: string, fim: string) {
+export function useAgendamentos(inicio: string, fim: string, profissionalId?: number | null) {
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([])
   const [loading, setLoading] = useState(true)
 
   const carregar = useCallback(async () => {
     setLoading(true)
     try {
-      const dados = await apiAdmin.get<Agendamento[]>(`/agendamentos?inicio=${inicio}&fim=${fim}`)
+      const filtro = profissionalId ? `&profissional_id=${profissionalId}` : ""
+      const dados = await apiAdmin.get<Agendamento[]>(
+        `/agendamentos?inicio=${inicio}&fim=${fim}${filtro}`
+      )
       setAgendamentos(dados)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Erro ao carregar agenda")
     } finally {
       setLoading(false)
     }
-  }, [inicio, fim])
+  }, [inicio, fim, profissionalId])
 
   useEffect(() => {
     carregar()

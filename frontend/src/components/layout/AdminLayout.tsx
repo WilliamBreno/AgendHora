@@ -10,6 +10,7 @@ import {
   Rocket,
   Settings,
   Sparkles,
+  Users,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -17,10 +18,17 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { useAuth } from "@/contexts/AuthContext"
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus"
 
-const NAV_ITEMS = [
+const NAV_ITEMS_BASE = [
   { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/admin/agenda", label: "Agenda", icon: CalendarRange },
   { to: "/admin/servicos", label: "Serviços", icon: Sparkles },
+]
+
+// Equipe e Configurações são exclusivas do dono — um profissional auxiliar
+// não convida outros profissionais nem mexe nas configurações gerais da
+// empresa (ver CLAUDE.md).
+const NAV_ITEMS_DONO = [
+  { to: "/admin/equipe", label: "Equipe", icon: Users },
   { to: "/admin/configuracoes", label: "Configurações", icon: Settings },
 ]
 
@@ -34,9 +42,11 @@ function Marca() {
 }
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+  const { ehDono } = useAuth()
+  const itens = ehDono ? [...NAV_ITEMS_BASE, ...NAV_ITEMS_DONO] : NAV_ITEMS_BASE
   return (
     <>
-      {NAV_ITEMS.map((item) => (
+      {itens.map((item) => (
         <NavLink
           key={item.to}
           to={item.to}

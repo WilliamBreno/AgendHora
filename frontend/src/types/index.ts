@@ -45,6 +45,8 @@ export interface Agendamento {
   cliente_email: string
   servico_id: number
   servico: Servico
+  profissional_id: number
+  profissional_nome: string
   data: string // "YYYY-MM-DD"
   hora: string // "HH:MM"
   status: StatusAgendamento
@@ -60,10 +62,46 @@ export interface AgendamentoInput {
   cliente_telefone: string
   cliente_email?: string
   servico_id: number
+  profissional_id: number
   data: string
   hora: string
   observacoes: string
   encaixe?: boolean
+}
+
+// Papel do usuário logado — define o que ele pode acessar (ver CLAUDE.md,
+// funcionalidade de profissional auxiliar).
+export type PapelUsuario = "dono" | "auxiliar"
+
+export interface Usuario {
+  id: number
+  nome: string
+  email: string
+  telefone: string
+  papel: PapelUsuario
+  estabelecimento_id: number
+  horario_trabalho: HorarioFuncionamento
+  created_at: string
+  updated_at: string
+}
+
+// Profissional agendável exposto na página pública (o cliente escolhe quem
+// vai atender) — só o essencial, nada sensível.
+export interface ProfissionalPublico {
+  id: number
+  nome: string
+}
+
+export interface ConvitePendente {
+  id: number
+  email: string
+  telefone: string
+  created_at: string
+}
+
+export interface Equipe {
+  profissionais: Usuario[]
+  convites_pendentes: ConvitePendente[]
 }
 
 // Chaves sem acento — precisam bater com models.DiasSemana no backend.
@@ -83,6 +121,9 @@ export interface HorarioDia {
   abre: string
   fecha: string
   fechado: boolean
+  // Intervalo de descanso opcional (ex: almoço) — ambos vazios = sem intervalo.
+  intervalo_inicio?: string
+  intervalo_fim?: string
 }
 
 export type HorarioFuncionamento = Partial<Record<DiaSemana, HorarioDia>>
@@ -97,6 +138,8 @@ export interface Estabelecimento {
   logo: string
   horario_funcionamento: HorarioFuncionamento
   icones_padrao: string[]
+  aviso_ativo: boolean
+  aviso_texto: string
   created_at: string
   updated_at: string
 }
@@ -115,6 +158,8 @@ export interface EstabelecimentoPublico {
   logo: string
   telefone: string
   endereco: string
+  aviso_ativo: boolean
+  aviso_texto: string
 }
 
 export interface PeriodoMetricas {

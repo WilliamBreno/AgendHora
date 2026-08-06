@@ -35,8 +35,14 @@ type Agendamento struct {
 	// existente no mesmo horário — uma decisão manual do dono no painel admin,
 	// não o comportamento padrão. A checagem de conflito continua bloqueando
 	// por padrão; isso só fica marcado quando ela foi explicitamente ignorada.
-	Encaixe           bool `gorm:"not null;default:false" json:"encaixe"`
-	EstabelecimentoID uint `gorm:"not null;index" json:"estabelecimento_id"`
+	Encaixe bool `gorm:"not null;default:false" json:"encaixe"`
+	// ProfissionalID identifica qual profissional (dono ou auxiliar) atende
+	// esse agendamento — cada um tem sua própria agenda/disponibilidade.
+	// default:0 só existe pra migration em cima de linhas existentes (ver
+	// database.MigrarProfissionais, que preenche o valor real em seguida).
+	ProfissionalID    uint    `gorm:"not null;default:0;index" json:"profissional_id"`
+	Profissional      Usuario `json:"profissional,omitempty"`
+	EstabelecimentoID uint    `gorm:"not null;index" json:"estabelecimento_id"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

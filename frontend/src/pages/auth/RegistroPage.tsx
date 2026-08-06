@@ -11,6 +11,7 @@ import { ApiError } from "@/lib/api"
 export function RegistroPage() {
   const { registro } = useAuth()
   const navigate = useNavigate()
+  const [nomeEstabelecimento, setNomeEstabelecimento] = useState("")
   const [nome, setNome] = useState("")
   const [email, setEmail] = useState("")
   const [senha, setSenha] = useState("")
@@ -28,7 +29,7 @@ export function RegistroPage() {
 
     setEnviando(true)
     try {
-      await registro(nome, email, senha)
+      await registro(nomeEstabelecimento, nome, email, senha)
       toast.success("Conta criada! Sua página de agendamento já está pronta.")
       navigate("/admin/comecando")
     } catch (err) {
@@ -52,7 +53,16 @@ export function RegistroPage() {
           className="flex flex-col gap-4 rounded-xl border border-border bg-card p-6"
         >
           <div className="grid gap-1.5">
-            <Label htmlFor="nome">Nome do estabelecimento</Label>
+            <Label htmlFor="nomeEstabelecimento">Nome do estabelecimento</Label>
+            <Input
+              id="nomeEstabelecimento"
+              value={nomeEstabelecimento}
+              onChange={(e) => setNomeEstabelecimento(e.target.value)}
+              required
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="nome">Seu nome</Label>
             <Input id="nome" value={nome} onChange={(e) => setNome(e.target.value)} required />
           </div>
           <div className="grid gap-1.5">

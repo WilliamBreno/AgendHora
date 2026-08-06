@@ -46,8 +46,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T
 }
 
-// api: chamadas sem contexto de empresa (hoje só /api/auth/*).
+// api: chamadas sem contexto de empresa nem token (auth e convites de
+// profissional — quem acessa ainda não tem sessão).
 export const api = {
+  get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, data: unknown) =>
     request<T>(path, { method: "POST", body: JSON.stringify(data) }),
 }

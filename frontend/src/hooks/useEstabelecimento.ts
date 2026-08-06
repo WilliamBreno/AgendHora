@@ -66,6 +66,19 @@ export function useEstabelecimento() {
     return resposta.logo
   }
 
+  async function atualizarAviso(ativo: boolean, texto: string) {
+    const resposta = await apiAdmin.put<{ aviso_ativo: boolean; aviso_texto: string }>(
+      "/estabelecimento/aviso",
+      { ativo, texto }
+    )
+    setEstabelecimento((atual) =>
+      atual
+        ? { ...atual, aviso_ativo: resposta.aviso_ativo, aviso_texto: resposta.aviso_texto }
+        : atual
+    )
+    return resposta
+  }
+
   return {
     estabelecimento,
     loading,
@@ -73,6 +86,7 @@ export function useEstabelecimento() {
     atualizarDados,
     atualizarHorario,
     atualizarLogo,
+    atualizarAviso,
     recarregar: carregar,
   }
 }

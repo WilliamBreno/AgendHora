@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -74,15 +73,19 @@ func (h *DashboardHandler) Get(c *gin.Context) {
 	fimMes := inicioMes.AddDate(0, 1, -1)
 	inicioJanela := hoje.AddDate(0, 0, -60)
 
-	var agendamentos []models.Agendamento
-	err := h.DB.Preload("Servico").
+	query := h.DB.Preload("Servico").
 		Where(
 			"estabelecimento_id = ? AND status = ? AND data >= ? AND data <= ?",
 			estabelecimentoID, models.StatusConfirmado, inicioJanela, fimMes,
-		).
-		Order("data asc").
-		Find(&agendamentos).Error
-	if err != nil {
+		)
+	// um auxiliar só vê o próprio desempenho — dados financeiros da empresa
+	// toda ficam só com o dono (ver decisão registrada com o usuário).
+	if auth.Papel(c) == models.PapelAuxiliar {
+		query = query.Where("profissional_id = ?", auth.UsuarioID(c))
+	}
+
+	var agendamentos []models.Agendamento
+	if err := query.Order("data asc").Find(&agendamentos).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao carregar dashboard"})
 		return
 	}
@@ -92,10 +95,12 @@ func (h *DashboardHandler) Get(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao buscar estabelecimento"})
 		return
 	}
-	var horarios models.HorarioFuncionamento
-	if err := json.Unmarshal(estabelecimento.HorarioFuncionamento, &horarios); err != nil {
-		horarios = models.HorarioFuncionamento{}
+	var usuario models.Usuario
+	if err := h.DB.First(&usuario, auth.UsuarioID(c)).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao buscar usuário"})
+		return
 	}
+	horarios := horarioDoProfissional(estabelecimento, usuario)
 
 	resposta := dashboardResponse{
 		Hoje:          metricasPeriodo(agendamentos, hoje, hoje, agora),

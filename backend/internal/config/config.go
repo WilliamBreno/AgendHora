@@ -15,6 +15,7 @@ type Config struct {
 	ResendFrom     string
 	AllowedOrigins []string
 	JWTSecret      string
+	FrontendURL    string
 }
 
 // Load lê o .env (se existir) e as variáveis de ambiente do processo.
@@ -50,6 +51,11 @@ func Load() Config {
 		log.Fatal("JWT_SECRET não definida")
 	}
 
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = "http://localhost:5173"
+	}
+
 	return Config{
 		DatabaseURL:    dbURL,
 		Port:           port,
@@ -57,5 +63,6 @@ func Load() Config {
 		ResendFrom:     resendFrom,
 		AllowedOrigins: origensExtras,
 		JWTSecret:      jwtSecret,
+		FrontendURL:    frontendURL,
 	}
 }

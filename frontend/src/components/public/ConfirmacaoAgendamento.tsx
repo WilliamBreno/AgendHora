@@ -67,6 +67,12 @@ export function ConfirmacaoAgendamento({
           <span className="text-muted-foreground">Serviço</span>
           <span className="font-medium">{agendamento.servico.nome}</span>
         </div>
+        {agendamento.profissional_nome && (
+          <div className="flex justify-between py-1">
+            <span className="text-muted-foreground">Profissional</span>
+            <span className="font-medium">{agendamento.profissional_nome}</span>
+          </div>
+        )}
         <div className="flex justify-between py-1">
           <span className="text-muted-foreground">Data</span>
           <span className="font-medium">{formatarDataExibicao(agendamento.data)}</span>
