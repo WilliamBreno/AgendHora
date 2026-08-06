@@ -96,6 +96,7 @@ export interface ConvitePendente {
   id: number
   email: string
   telefone: string
+  link: string
   created_at: string
 }
 

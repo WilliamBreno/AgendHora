@@ -37,7 +37,7 @@ func permitirOrigem(origensExtras []string) func(origin string) bool {
 // exigem JWT (o dono logado) e resolvem a empresa a partir do token; rotas
 // /publico/:slug não exigem login e resolvem a empresa pela URL — é o link
 // que cada dono compartilha com os próprios clientes.
-func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notificador, origensExtras []string) *gin.Engine {
+func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notificador, origensExtras []string, frontendURL string) *gin.Engine {
 	router := gin.Default()
 
 	router.Use(cors.New(cors.Config{
@@ -60,7 +60,7 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 	agendamentoHandler := handlers.NewAgendamentoHandler(db, notificador)
 	disponibilidadeHandler := handlers.NewDisponibilidadeHandler(db)
 	dashboardHandler := handlers.NewDashboardHandler(db)
-	profissionalHandler := handlers.NewProfissionalHandler(db, gerenciador, notificador)
+	profissionalHandler := handlers.NewProfissionalHandler(db, gerenciador, notificador, frontendURL)
 	usuarioHandler := handlers.NewUsuarioHandler(db)
 
 	apiGroup := router.Group("/api")

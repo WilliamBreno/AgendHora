@@ -1,11 +1,16 @@
 import { useState, type FormEvent } from "react"
-import { Mail, UserPlus } from "lucide-react"
+import { Copy, Mail, UserPlus } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useEquipe } from "@/hooks/useEquipe"
 import { ApiError } from "@/lib/api"
+
+function copiarLink(link: string) {
+  navigator.clipboard.writeText(link)
+  toast.success("Link copiado — pode mandar por WhatsApp, SMS, onde preferir.")
+}
 
 export function EquipePage() {
   const { equipe, loading, convidar } = useEquipe()
@@ -20,7 +25,9 @@ export function EquipePage() {
     setEnviando(true)
     try {
       await convidar(email, telefone)
-      toast.success("Convite enviado. Assim que a pessoa aceitar, ela aparece na sua equipe.")
+      toast.success(
+        "Convite criado. Enviamos por e-mail — se não chegar, copie o link na lista abaixo e mande você mesmo."
+      )
       setEmail("")
       setTelefone("")
     } catch (err) {
@@ -43,7 +50,8 @@ export function EquipePage() {
       <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="font-heading font-medium">Convidar profissional</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          A pessoa recebe um e-mail com um link pra criar a própria senha. Ela terá acesso ao
+          A pessoa recebe um e-mail com um link pra criar a própria senha (se o e-mail não
+          chegar, você pode copiar o link na lista abaixo e mandar direto). Ela terá acesso ao
           Dashboard, Serviços e à própria Agenda — sem acesso a Configurações nem a convidar
           outros profissionais.
         </p>
@@ -107,8 +115,17 @@ export function EquipePage() {
                       className="flex items-center gap-3 rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground"
                     >
                       <Mail className="size-4 shrink-0" />
-                      <span>{convite.email}</span>
-                      <span className="ml-auto text-xs">Aguardando aceite</span>
+                      <span className="truncate">{convite.email}</span>
+                      <span className="ml-auto shrink-0 text-xs">Aguardando aceite</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => copiarLink(convite.link)}
+                      >
+                        <Copy className="size-4" />
+                        Copiar link
+                      </Button>
                     </div>
                   ))}
                 </div>

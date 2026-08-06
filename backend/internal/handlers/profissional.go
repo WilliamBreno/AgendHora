@@ -20,10 +20,19 @@ type ProfissionalHandler struct {
 	DB          *gorm.DB
 	Gerenciador *auth.Gerenciador
 	Notificador *notifications.Notificador
+	FrontendURL string
 }
 
-func NewProfissionalHandler(db *gorm.DB, gerenciador *auth.Gerenciador, notificador *notifications.Notificador) *ProfissionalHandler {
-	return &ProfissionalHandler{DB: db, Gerenciador: gerenciador, Notificador: notificador}
+func NewProfissionalHandler(db *gorm.DB, gerenciador *auth.Gerenciador, notificador *notifications.Notificador, frontendURL string) *ProfissionalHandler {
+	return &ProfissionalHandler{DB: db, Gerenciador: gerenciador, Notificador: notificador, FrontendURL: frontendURL}
+}
+
+// linkConvite monta o link de cadastro do convite. É devolvido tanto na
+// resposta da API quanto usado no corpo do e-mail — assim o dono sempre tem
+// como copiar e mandar manualmente (WhatsApp, SMS) se o e-mail não chegar
+// (ex: conta do Resend em modo sandbox, sem domínio verificado).
+func (h *ProfissionalHandler) linkConvite(token string) string {
+	return h.FrontendURL + "/convite/" + token
 }
 
 type profissionalResponse struct {
@@ -42,6 +51,7 @@ type conviteResponse struct {
 	ID        uint      `json:"id"`
 	Email     string    `json:"email"`
 	Telefone  string    `json:"telefone"`
+	Link      string    `json:"link"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -67,7 +77,10 @@ func (h *ProfissionalHandler) Listar(c *gin.Context) {
 	}
 	pendentes := make([]conviteResponse, 0, len(convites))
 	for _, cv := range convites {
-		pendentes = append(pendentes, conviteResponse{ID: cv.ID, Email: cv.Email, Telefone: cv.Telefone, CreatedAt: cv.CreatedAt})
+		pendentes = append(pendentes, conviteResponse{
+			ID: cv.ID, Email: cv.Email, Telefone: cv.Telefone,
+			Link: h.linkConvite(cv.Token), CreatedAt: cv.CreatedAt,
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{"profissionais": profissionais, "convites_pendentes": pendentes})
@@ -148,12 +161,17 @@ func (h *ProfissionalHandler) Convidar(c *gin.Context) {
 		return
 	}
 
+	link := h.linkConvite(convite.Token)
+
 	var estabelecimento models.Estabelecimento
 	if err := h.DB.First(&estabelecimento, estabelecimentoID).Error; err == nil && h.Notificador != nil {
-		go h.Notificador.NotificarConviteProfissional(estabelecimento, convite)
+		go h.Notificador.NotificarConviteProfissional(estabelecimento, convite.Email, link)
 	}
 
-	c.JSON(http.StatusCreated, conviteResponse{ID: convite.ID, Email: convite.Email, Telefone: convite.Telefone, CreatedAt: convite.CreatedAt})
+	c.JSON(http.StatusCreated, conviteResponse{
+		ID: convite.ID, Email: convite.Email, Telefone: convite.Telefone,
+		Link: link, CreatedAt: convite.CreatedAt,
+	})
 }
 
 func (h *ProfissionalHandler) buscarConviteValido(c *gin.Context) (*models.ConviteProfissional, bool) {

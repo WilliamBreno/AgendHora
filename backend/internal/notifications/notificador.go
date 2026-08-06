@@ -13,21 +13,19 @@ import (
 // e-mail que falha ou demora não deve derrubar nem atrasar a criação do
 // agendamento em si.
 type Notificador struct {
-	client      *resend.Client
-	from        string
-	frontendURL string
+	client *resend.Client
+	from   string
 }
 
 // New retorna nil se apiKey estiver vazia — o chamador deve tratar um
 // Notificador nil como "notificações desligadas" em vez de travar o boot
-// do servidor por falta de configuração de e-mail. frontendURL é usado pra
-// montar links (ex: o de aceite de convite de profissional).
-func New(apiKey, from, frontendURL string) *Notificador {
+// do servidor por falta de configuração de e-mail.
+func New(apiKey, from string) *Notificador {
 	if apiKey == "" {
 		log.Println("aviso: RESEND_API_KEY não definida — notificações por e-mail desligadas")
 		return nil
 	}
-	return &Notificador{client: resend.NewClient(apiKey), from: from, frontendURL: frontendURL}
+	return &Notificador{client: resend.NewClient(apiKey), from: from}
 }
 
 func (n *Notificador) NotificarNovoAgendamento(estabelecimento models.Estabelecimento, agendamento models.Agendamento) {
@@ -67,14 +65,16 @@ func (n *Notificador) NotificarCancelamento(estabelecimento models.Estabelecimen
 }
 
 // NotificarConviteProfissional manda o link de cadastro pro profissional
-// auxiliar recém-convidado pelo dono.
-func (n *Notificador) NotificarConviteProfissional(estabelecimento models.Estabelecimento, convite models.ConviteProfissional) {
+// auxiliar recém-convidado pelo dono. link já vem pronto (ver
+// handlers.ProfissionalHandler, que também devolve esse mesmo link na
+// resposta da API — o dono pode copiá-lo e mandar manualmente se o e-mail
+// não chegar, por exemplo por causa do modo sandbox do Resend).
+func (n *Notificador) NotificarConviteProfissional(estabelecimento models.Estabelecimento, email, link string) {
 	if n == nil {
 		return
 	}
-	link := n.frontendURL + "/convite/" + convite.Token
 	n.enviar(
-		convite.Email,
+		email,
 		"Convite para fazer parte de "+estabelecimento.Nome+" no AgendHora",
 		emailConviteProfissionalHTML(estabelecimento, link),
 	)

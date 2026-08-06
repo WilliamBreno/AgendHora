@@ -17,9 +17,9 @@ func main() {
 	database.MigrarSlugsLegados(db)
 	database.MigrarProfissionais(db)
 
-	notificador := notifications.New(cfg.ResendAPIKey, cfg.ResendFrom, cfg.FrontendURL)
+	notificador := notifications.New(cfg.ResendAPIKey, cfg.ResendFrom)
 
-	router := api.NewRouter(db, cfg.JWTSecret, notificador, cfg.AllowedOrigins)
+	router := api.NewRouter(db, cfg.JWTSecret, notificador, cfg.AllowedOrigins, cfg.FrontendURL)
 
 	log.Printf("servidor rodando na porta %s", cfg.Port)
 	if err := router.Run(":" + cfg.Port); err != nil {
