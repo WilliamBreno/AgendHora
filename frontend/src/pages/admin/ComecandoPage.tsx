@@ -1,12 +1,13 @@
 import { useState } from "react"
 import { Link } from "react-router-dom"
-import { Clock, Copy, ImagePlus, Sparkles } from "lucide-react"
+import { CheckCircle2, Clock, Copy, ImagePlus, PartyPopper, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/AuthContext"
+import { useOnboardingStatus } from "@/hooks/useOnboardingStatus"
 
 interface Passo {
-  numero: number
+  chave: "servicos" | "horario" | "logo"
   icone: typeof Sparkles
   titulo: string
   descricao: string
@@ -16,7 +17,7 @@ interface Passo {
 
 const PASSOS: Passo[] = [
   {
-    numero: 1,
+    chave: "servicos",
     icone: Sparkles,
     titulo: "Cadastre seus serviços",
     descricao:
@@ -25,7 +26,7 @@ const PASSOS: Passo[] = [
     linkPara: "/admin/servicos",
   },
   {
-    numero: 2,
+    chave: "horario",
     icone: Clock,
     titulo: "Configure seu horário de funcionamento",
     descricao:
@@ -34,7 +35,7 @@ const PASSOS: Passo[] = [
     linkPara: "/admin/configuracoes",
   },
   {
-    numero: 3,
+    chave: "logo",
     icone: ImagePlus,
     titulo: "Adicione sua logo (opcional)",
     descricao: "Deixa sua página de agendamento com a cara do seu negócio.",
@@ -45,7 +46,17 @@ const PASSOS: Passo[] = [
 
 export function ComecandoPage() {
   const { estabelecimento } = useAuth()
+  const { carregando, temServicos, temHorario, temLogo, obrigatoriosCompletos } =
+    useOnboardingStatus()
   const [copiado, setCopiado] = useState(false)
+
+  const concluido: Record<Passo["chave"], boolean> = {
+    servicos: temServicos,
+    horario: temHorario,
+    logo: temLogo,
+  }
+
+  const passosPendentes = PASSOS.filter((passo) => !concluido[passo.chave])
 
   const linkPublico = estabelecimento ? `${window.location.origin}/${estabelecimento.slug}` : ""
 
@@ -63,63 +74,87 @@ export function ComecandoPage() {
           Bem-vindo, {estabelecimento?.nome}!
         </h1>
         <p className="text-sm text-muted-foreground">
-          Faltam só alguns passos pra sua agenda começar a receber clientes.
+          {carregando
+            ? "Carregando..."
+            : obrigatoriosCompletos
+              ? "Sua agenda já está pronta pra receber clientes."
+              : "Faltam só alguns passos pra sua agenda começar a receber clientes."}
         </p>
       </div>
 
-      <div className="flex flex-col gap-4">
-        {PASSOS.map((passo) => (
-          <div
-            key={passo.numero}
-            className="flex items-start gap-4 rounded-xl border border-border bg-card p-5"
-          >
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 font-heading font-semibold text-primary">
-              {passo.numero}
+      {!carregando && (
+        <div className="flex flex-col gap-4">
+          {obrigatoriosCompletos && (
+            <div className="flex items-center gap-3 rounded-xl border border-servico-teal/30 bg-servico-teal/5 p-5">
+              <PartyPopper className="size-6 shrink-0 text-servico-teal" />
+              <p className="text-sm">
+                Tudo certo! Serviços e horário configurados — sua página já está funcionando.
+                {!temLogo && " Se quiser, ainda dá pra adicionar uma logo abaixo."}
+              </p>
             </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <passo.icone className="size-4 text-muted-foreground" />
-                <h2 className="font-heading font-medium">{passo.titulo}</h2>
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">{passo.descricao}</p>
-              <Button
-                render={<Link to={passo.linkPara} />}
-                nativeButton={false}
-                variant="outline"
-                size="sm"
-                className="mt-3"
-              >
-                {passo.linkTexto}
-              </Button>
-            </div>
-          </div>
-        ))}
+          )}
 
-        <div className="flex items-start gap-4 rounded-xl border border-border bg-card p-5">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 font-heading font-semibold text-primary">
-            4
-          </div>
-          <div className="flex-1">
-            <h2 className="font-heading font-medium">Compartilhe seu link de agendamento</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Esse é o link que seus clientes usam pra agendar — manda no WhatsApp, coloca na bio
-              do Instagram, onde fizer sentido.
-            </p>
-            {linkPublico && (
-              <div className="mt-3 flex items-center gap-2">
-                <code className="flex-1 truncate rounded-lg border border-border bg-muted px-3 py-2 text-sm">
-                  {linkPublico}
-                </code>
-                <Button type="button" variant="outline" size="icon-sm" onClick={copiarLink}>
-                  <Copy className="size-4" />
-                  <span className="sr-only">Copiar link</span>
+          {passosPendentes.map((passo) => (
+            <div
+              key={passo.chave}
+              className="flex items-start gap-4 rounded-xl border border-border bg-card p-5"
+            >
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <passo.icone className="size-4" />
+              </div>
+              <div className="flex-1">
+                <h2 className="font-heading font-medium">{passo.titulo}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{passo.descricao}</p>
+                <Button
+                  render={<Link to={passo.linkPara} />}
+                  nativeButton={false}
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                >
+                  {passo.linkTexto}
                 </Button>
               </div>
-            )}
-            {copiado && <p className="mt-1 text-xs text-primary">Copiado!</p>}
+            </div>
+          ))}
+
+          {PASSOS.filter((passo) => concluido[passo.chave]).length > 0 && (
+            <div className="flex flex-col gap-2">
+              {PASSOS.filter((passo) => concluido[passo.chave]).map((passo) => (
+                <div
+                  key={passo.chave}
+                  className="flex items-center gap-2 px-1 text-sm text-muted-foreground"
+                >
+                  <CheckCircle2 className="size-4 shrink-0 text-servico-teal" />
+                  <span className="line-through">{passo.titulo}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-start gap-4 rounded-xl border border-border bg-card p-5">
+            <div className="flex-1">
+              <h2 className="font-heading font-medium">Compartilhe seu link de agendamento</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Esse é o link que seus clientes usam pra agendar — manda no WhatsApp, coloca na
+                bio do Instagram, onde fizer sentido.
+              </p>
+              {linkPublico && (
+                <div className="mt-3 flex items-center gap-2">
+                  <code className="flex-1 truncate rounded-lg border border-border bg-muted px-3 py-2 text-sm">
+                    {linkPublico}
+                  </code>
+                  <Button type="button" variant="outline" size="icon-sm" onClick={copiarLink}>
+                    <Copy className="size-4" />
+                    <span className="sr-only">Copiar link</span>
+                  </Button>
+                </div>
+              )}
+              {copiado && <p className="mt-1 text-xs text-primary">Copiado!</p>}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <Button
         render={<Link to="/admin/dashboard" />}

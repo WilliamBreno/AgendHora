@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useAuth } from "@/contexts/AuthContext"
+import { useOnboardingStatus } from "@/hooks/useOnboardingStatus"
 
 const NAV_ITEMS = [
   { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -59,6 +60,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 
 function RodapeConta() {
   const { estabelecimento, logout } = useAuth()
+  const { carregando, obrigatoriosCompletos } = useOnboardingStatus()
   const navigate = useNavigate()
 
   function sair() {
@@ -80,13 +82,15 @@ function RodapeConta() {
             <ExternalLink className="size-4" />
             Ver página pública
           </a>
-          <NavLink
-            to="/admin/comecando"
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <Rocket className="size-4" />
-            Primeiros passos
-          </NavLink>
+          {!carregando && !obrigatoriosCompletos && (
+            <NavLink
+              to="/admin/comecando"
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <Rocket className="size-4" />
+              Primeiros passos
+            </NavLink>
+          )}
         </>
       )}
       <button

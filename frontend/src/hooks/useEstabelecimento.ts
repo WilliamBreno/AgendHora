@@ -1,11 +1,21 @@
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { apiAdmin, ApiError } from "@/lib/api"
+import { useAuth } from "@/contexts/AuthContext"
 import type { Estabelecimento, EstabelecimentoDadosInput, HorarioFuncionamento } from "@/types"
 
 export function useEstabelecimento() {
+  const { atualizarEstabelecimento } = useAuth()
   const [estabelecimento, setEstabelecimento] = useState<Estabelecimento | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // mantém o AuthContext (usado na sidebar/onboarding) em dia com qualquer
+  // mudança feita por aqui — antes cada um guardava sua própria cópia e a
+  // sidebar só atualizava depois de um reload. Sincroniza depois do render
+  // (não durante), pra não disparar "setState de outro componente" do React.
+  useEffect(() => {
+    if (estabelecimento) atualizarEstabelecimento(estabelecimento)
+  }, [estabelecimento, atualizarEstabelecimento])
 
   const carregar = useCallback(async () => {
     setLoading(true)
