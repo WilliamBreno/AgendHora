@@ -15,6 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { ThemeToggle } from "@/components/common/ThemeToggle"
 import { usePublicoEstabelecimento } from "@/hooks/usePublicoEstabelecimento"
 import { useMeusAgendamentos } from "@/hooks/useMeusAgendamentos"
 import { formatarDataExibicao, formatarPrecoServico } from "@/lib/formatacao"
@@ -63,6 +64,10 @@ export function MeusAgendamentosPage() {
 
   return (
     <div className="mx-auto flex min-h-svh max-w-lg flex-col gap-6 px-4 py-8">
+      <div className="flex justify-end">
+        <ThemeToggle />
+      </div>
+
       <div className="text-center">
         <h1 className="font-heading text-2xl font-semibold">
           {estabelecimento?.nome ?? "Meus agendamentos"}

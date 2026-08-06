@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { ThemeToggle } from "@/components/common/ThemeToggle"
 import { useAuth } from "@/contexts/AuthContext"
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus"
 
@@ -32,11 +33,31 @@ const NAV_ITEMS_DONO = [
   { to: "/admin/configuracoes", label: "Configurações", icon: Settings },
 ]
 
+// Marca mostra a logo do próprio estabelecimento quando o dono já subiu uma
+// (personaliza o painel com a cara do negócio) — sem logo, cai no ícone e
+// nome padrão do AgendHora.
 function Marca() {
+  const { estabelecimento } = useAuth()
+
+  if (estabelecimento?.logo) {
+    return (
+      <div className="flex min-w-0 items-center gap-2 px-2">
+        <img
+          src={estabelecimento.logo}
+          alt={estabelecimento.nome}
+          className="size-7 shrink-0 rounded-md object-cover"
+        />
+        <span className="truncate font-heading text-lg font-semibold">
+          {estabelecimento.nome}
+        </span>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex items-center gap-2 px-2">
-      <CalendarDays className="size-5 text-primary" />
-      <span className="font-heading text-lg font-semibold">AgendHora</span>
+    <div className="flex min-w-0 items-center gap-2 px-2">
+      <CalendarDays className="size-5 shrink-0 text-primary" />
+      <span className="truncate font-heading text-lg font-semibold">AgendHora</span>
     </div>
   )
 }
@@ -128,15 +149,19 @@ export function AdminLayout() {
     <div className="flex min-h-svh flex-col bg-background text-foreground md:flex-row">
       <header className="flex items-center justify-between border-b border-border p-3 md:hidden">
         <Marca />
-        <Button variant="ghost" size="icon-sm" onClick={() => setMenuAberto(true)}>
-          <Menu className="size-5" />
-          <span className="sr-only">Abrir menu</span>
-        </Button>
+        <div className="flex items-center gap-1">
+          <ThemeToggle />
+          <Button variant="ghost" size="icon-sm" onClick={() => setMenuAberto(true)}>
+            <Menu className="size-5" />
+            <span className="sr-only">Abrir menu</span>
+          </Button>
+        </div>
       </header>
 
       <aside className="hidden w-56 shrink-0 flex-col gap-1 border-r border-border p-4 md:flex">
-        <div className="mb-4">
+        <div className="mb-4 flex items-center justify-between">
           <Marca />
+          <ThemeToggle />
         </div>
         <NavLinks />
         <RodapeConta />

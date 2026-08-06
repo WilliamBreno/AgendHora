@@ -31,8 +31,18 @@ func NewProfissionalHandler(db *gorm.DB, gerenciador *auth.Gerenciador, notifica
 // resposta da API quanto usado no corpo do e-mail — assim o dono sempre tem
 // como copiar e mandar manualmente (WhatsApp, SMS) se o e-mail não chegar
 // (ex: conta do Resend em modo sandbox, sem domínio verificado).
-func (h *ProfissionalHandler) linkConvite(token string) string {
-	return h.FrontendURL + "/convite/" + token
+//
+// A base do link vem do cabeçalho Origin da própria requisição — é o
+// endereço do frontend que o dono está usando de verdade nesse momento
+// (localhost em dev, o domínio de produção, ou até uma URL de preview do
+// Vercel, que muda a cada deploy). h.FrontendURL só entra como fallback
+// pros casos raros em que o navegador não manda esse cabeçalho.
+func (h *ProfissionalHandler) linkConvite(c *gin.Context, token string) string {
+	base := c.GetHeader("Origin")
+	if base == "" {
+		base = h.FrontendURL
+	}
+	return base + "/convite/" + token
 }
 
 type profissionalResponse struct {
@@ -79,7 +89,7 @@ func (h *ProfissionalHandler) Listar(c *gin.Context) {
 	for _, cv := range convites {
 		pendentes = append(pendentes, conviteResponse{
 			ID: cv.ID, Email: cv.Email, Telefone: cv.Telefone,
-			Link: h.linkConvite(cv.Token), CreatedAt: cv.CreatedAt,
+			Link: h.linkConvite(c, cv.Token), CreatedAt: cv.CreatedAt,
 		})
 	}
 
@@ -161,7 +171,7 @@ func (h *ProfissionalHandler) Convidar(c *gin.Context) {
 		return
 	}
 
-	link := h.linkConvite(convite.Token)
+	link := h.linkConvite(c, convite.Token)
 
 	var estabelecimento models.Estabelecimento
 	if err := h.DB.First(&estabelecimento, estabelecimentoID).Error; err == nil && h.Notificador != nil {

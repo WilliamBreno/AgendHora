@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { ThemeToggle } from "@/components/common/ThemeToggle"
 import { useAuth } from "@/contexts/AuthContext"
 import { ApiError } from "@/lib/api"
 
@@ -40,7 +41,8 @@ export function RegistroPage() {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center bg-background p-4">
+    <div className="relative flex min-h-svh items-center justify-center bg-background p-4">
+      <ThemeToggle className="absolute top-4 right-4" />
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
           <CalendarDays className="size-8 text-primary" />

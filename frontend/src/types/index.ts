@@ -141,6 +141,8 @@ export interface Estabelecimento {
   icones_padrao: string[]
   aviso_ativo: boolean
   aviso_texto: string
+  aviso_cor_texto: string
+  aviso_cor_fundo: string
   created_at: string
   updated_at: string
 }
@@ -161,6 +163,8 @@ export interface EstabelecimentoPublico {
   endereco: string
   aviso_ativo: boolean
   aviso_texto: string
+  aviso_cor_texto: string
+  aviso_cor_fundo: string
 }
 
 export interface PeriodoMetricas {

@@ -105,6 +105,8 @@ export function ConfiguracoesPage() {
             <AvisoEditor
               ativo={estabelecimento.aviso_ativo}
               texto={estabelecimento.aviso_texto}
+              corTexto={estabelecimento.aviso_cor_texto}
+              corFundo={estabelecimento.aviso_cor_fundo}
               onAtualizar={atualizarAviso}
             />
           )}

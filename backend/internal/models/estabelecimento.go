@@ -50,9 +50,12 @@ type Estabelecimento struct {
 
 	// AvisoAtivo/AvisoTexto controlam o aviso/anúncio chamativo opcional que
 	// aparece como uma faixa na página pública, sem bloquear o agendamento
-	// (o cliente pode fechá-lo).
-	AvisoAtivo bool   `gorm:"not null;default:false" json:"aviso_ativo"`
-	AvisoTexto string `json:"aviso_texto"`
+	// (o cliente pode fechá-lo). AvisoCorTexto/AvisoCorFundo são opcionais
+	// (formato hex, ex: "#0C7C71") — vazios significam "usar o visual padrão".
+	AvisoAtivo    bool   `gorm:"not null;default:false" json:"aviso_ativo"`
+	AvisoTexto    string `json:"aviso_texto"`
+	AvisoCorTexto string `json:"aviso_cor_texto"`
+	AvisoCorFundo string `json:"aviso_cor_fundo"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

@@ -36,13 +36,15 @@ func (h *EstabelecimentoHandler) Get(c *gin.Context) {
 }
 
 type estabelecimentoPublicoResponse struct {
-	Nome       string `json:"nome"`
-	Slug       string `json:"slug"`
-	Logo       string `json:"logo"`
-	Telefone   string `json:"telefone"`
-	Endereco   string `json:"endereco"`
-	AvisoAtivo bool   `json:"aviso_ativo"`
-	AvisoTexto string `json:"aviso_texto"`
+	Nome          string `json:"nome"`
+	Slug          string `json:"slug"`
+	Logo          string `json:"logo"`
+	Telefone      string `json:"telefone"`
+	Endereco      string `json:"endereco"`
+	AvisoAtivo    bool   `json:"aviso_ativo"`
+	AvisoTexto    string `json:"aviso_texto"`
+	AvisoCorTexto string `json:"aviso_cor_texto"`
+	AvisoCorFundo string `json:"aviso_cor_fundo"`
 }
 
 // GetPublico retorna só o que a página de agendamento do cliente precisa
@@ -54,13 +56,15 @@ func (h *EstabelecimentoHandler) GetPublico(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, estabelecimentoPublicoResponse{
-		Nome:       estabelecimento.Nome,
-		Slug:       estabelecimento.Slug,
-		Logo:       estabelecimento.Logo,
-		Telefone:   estabelecimento.Telefone,
-		Endereco:   estabelecimento.Endereco,
-		AvisoAtivo: estabelecimento.AvisoAtivo,
-		AvisoTexto: estabelecimento.AvisoTexto,
+		Nome:          estabelecimento.Nome,
+		Slug:          estabelecimento.Slug,
+		Logo:          estabelecimento.Logo,
+		Telefone:      estabelecimento.Telefone,
+		Endereco:      estabelecimento.Endereco,
+		AvisoAtivo:    estabelecimento.AvisoAtivo,
+		AvisoTexto:    estabelecimento.AvisoTexto,
+		AvisoCorTexto: estabelecimento.AvisoCorTexto,
+		AvisoCorFundo: estabelecimento.AvisoCorFundo,
 	})
 }
 
@@ -245,13 +249,19 @@ func (h *EstabelecimentoHandler) AtualizarLogo(c *gin.Context) {
 }
 
 type avisoInput struct {
-	Ativo bool   `json:"ativo"`
-	Texto string `json:"texto"`
+	Ativo    bool   `json:"ativo"`
+	Texto    string `json:"texto"`
+	CorTexto string `json:"cor_texto"`
+	CorFundo string `json:"cor_fundo"`
 }
 
-// AtualizarAviso liga/desliga e edita o aviso/anúncio chamativo que aparece
-// como uma faixa no topo da página pública — nunca bloqueia o agendamento,
-// o cliente pode fechá-la.
+// corHexValida aceita "#RGB" ou "#RRGGBB"; string vazia também é válida —
+// significa "sem cor customizada, usar o visual padrão".
+var corHexValida = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
+
+// AtualizarAviso liga/desliga, edita o texto e as cores (opcionais) do
+// aviso/anúncio chamativo que aparece como uma faixa no topo da página
+// pública — nunca bloqueia o agendamento, o cliente pode fechá-la.
 func (h *EstabelecimentoHandler) AtualizarAviso(c *gin.Context) {
 	var input avisoInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -259,13 +269,33 @@ func (h *EstabelecimentoHandler) AtualizarAviso(c *gin.Context) {
 		return
 	}
 
+	corTexto := strings.TrimSpace(input.CorTexto)
+	corFundo := strings.TrimSpace(input.CorFundo)
+	if corTexto != "" && !corHexValida.MatchString(corTexto) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cor de texto inválida"})
+		return
+	}
+	if corFundo != "" && !corHexValida.MatchString(corFundo) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cor de fundo inválida"})
+		return
+	}
+
 	texto := strings.TrimSpace(input.Texto)
+	ativo := input.Ativo && texto != ""
 	err := h.DB.Model(&models.Estabelecimento{}).
 		Where("id = ?", auth.EstabelecimentoID(c)).
-		Updates(map[string]any{"aviso_ativo": input.Ativo && texto != "", "aviso_texto": texto}).Error
+		Updates(map[string]any{
+			"aviso_ativo":     ativo,
+			"aviso_texto":     texto,
+			"aviso_cor_texto": corTexto,
+			"aviso_cor_fundo": corFundo,
+		}).Error
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao atualizar aviso"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"aviso_ativo": input.Ativo && texto != "", "aviso_texto": texto})
+	c.JSON(http.StatusOK, gin.H{
+		"aviso_ativo": ativo, "aviso_texto": texto,
+		"aviso_cor_texto": corTexto, "aviso_cor_fundo": corFundo,
+	})
 }

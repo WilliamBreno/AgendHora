@@ -9,6 +9,7 @@ import { HorarioSelecao } from "@/components/public/HorarioSelecao"
 import { DadosClienteForm, type DadosCliente } from "@/components/public/DadosClienteForm"
 import { ConfirmacaoAgendamento } from "@/components/public/ConfirmacaoAgendamento"
 import { AvisoFaixa } from "@/components/public/AvisoFaixa"
+import { ThemeToggle } from "@/components/common/ThemeToggle"
 import { usePublicoServicos } from "@/hooks/usePublicoServicos"
 import { usePublicoEstabelecimento } from "@/hooks/usePublicoEstabelecimento"
 import { usePublicoProfissionais } from "@/hooks/usePublicoProfissionais"
@@ -119,6 +120,10 @@ export function AgendarPage() {
 
   return (
     <div className="mx-auto flex min-h-svh max-w-lg flex-col gap-6 px-4 py-8">
+      <div className="flex justify-end">
+        <ThemeToggle />
+      </div>
+
       <div className="flex flex-col items-center gap-3 text-center">
         {estabelecimento?.logo && (
           <img
@@ -136,7 +141,11 @@ export function AgendarPage() {
       </div>
 
       {estabelecimento?.aviso_ativo && etapa !== "confirmacao" && (
-        <AvisoFaixa texto={estabelecimento.aviso_texto} />
+        <AvisoFaixa
+          texto={estabelecimento.aviso_texto}
+          corTexto={estabelecimento.aviso_cor_texto}
+          corFundo={estabelecimento.aviso_cor_fundo}
+        />
       )}
 
       {ETAPAS_COM_VOLTAR.includes(etapa) && (

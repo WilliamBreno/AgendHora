@@ -66,14 +66,22 @@ export function useEstabelecimento() {
     return resposta.logo
   }
 
-  async function atualizarAviso(ativo: boolean, texto: string) {
-    const resposta = await apiAdmin.put<{ aviso_ativo: boolean; aviso_texto: string }>(
-      "/estabelecimento/aviso",
-      { ativo, texto }
-    )
+  async function atualizarAviso(ativo: boolean, texto: string, corTexto: string, corFundo: string) {
+    const resposta = await apiAdmin.put<{
+      aviso_ativo: boolean
+      aviso_texto: string
+      aviso_cor_texto: string
+      aviso_cor_fundo: string
+    }>("/estabelecimento/aviso", { ativo, texto, cor_texto: corTexto, cor_fundo: corFundo })
     setEstabelecimento((atual) =>
       atual
-        ? { ...atual, aviso_ativo: resposta.aviso_ativo, aviso_texto: resposta.aviso_texto }
+        ? {
+            ...atual,
+            aviso_ativo: resposta.aviso_ativo,
+            aviso_texto: resposta.aviso_texto,
+            aviso_cor_texto: resposta.aviso_cor_texto,
+            aviso_cor_fundo: resposta.aviso_cor_fundo,
+          }
         : atual
     )
     return resposta

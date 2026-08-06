@@ -1,5 +1,6 @@
 import { Navigate, Route, BrowserRouter, Routes } from "react-router-dom"
 import { AuthProvider } from "@/contexts/AuthContext"
+import { ThemeProvider } from "@/contexts/ThemeContext"
 import { AdminLayout } from "@/components/layout/AdminLayout"
 import { RotaProtegida } from "@/components/layout/RotaProtegida"
 import { DashboardPage } from "@/pages/admin/DashboardPage"
@@ -18,32 +19,34 @@ import { MeusAgendamentosPage } from "@/pages/public/MeusAgendamentosPage"
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/registro" element={<RegistroPage />} />
-          <Route path="/convite/:token" element={<ConvitePage />} />
+      <ThemeProvider>
+        <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/registro" element={<RegistroPage />} />
+            <Route path="/convite/:token" element={<ConvitePage />} />
 
-          <Route element={<RotaProtegida />}>
-            <Route path="/admin" element={<AdminLayout />}>
-              <Route index element={<Navigate to="dashboard" replace />} />
-              <Route path="comecando" element={<ComecandoPage />} />
-              <Route path="dashboard" element={<DashboardPage />} />
-              <Route path="agenda" element={<AgendaPage />} />
-              <Route path="servicos" element={<ServicosPage />} />
-              <Route element={<RotaSomenteDono />}>
-                <Route path="configuracoes" element={<ConfiguracoesPage />} />
-                <Route path="equipe" element={<EquipePage />} />
+            <Route element={<RotaProtegida />}>
+              <Route path="/admin" element={<AdminLayout />}>
+                <Route index element={<Navigate to="dashboard" replace />} />
+                <Route path="comecando" element={<ComecandoPage />} />
+                <Route path="dashboard" element={<DashboardPage />} />
+                <Route path="agenda" element={<AgendaPage />} />
+                <Route path="servicos" element={<ServicosPage />} />
+                <Route element={<RotaSomenteDono />}>
+                  <Route path="configuracoes" element={<ConfiguracoesPage />} />
+                  <Route path="equipe" element={<EquipePage />} />
+                </Route>
               </Route>
             </Route>
-          </Route>
 
-          <Route path="/:slug/meus-agendamentos" element={<MeusAgendamentosPage />} />
-          <Route path="/:slug" element={<AgendarPage />} />
+            <Route path="/:slug/meus-agendamentos" element={<MeusAgendamentosPage />} />
+            <Route path="/:slug" element={<AgendarPage />} />
 
-          <Route path="/" element={<Navigate to="/login" replace />} />
-        </Routes>
-      </AuthProvider>
+            <Route path="/" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   )
 }
