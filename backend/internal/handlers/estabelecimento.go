@@ -188,8 +188,6 @@ func (h *EstabelecimentoHandler) AtualizarIcones(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"icones_padrao": icones})
 }
 
-const logoTamanhoMaximo = 2 * 1024 * 1024 // ~2MB em base64 (~1.5MB de imagem)
-
 type logoInput struct {
 	Logo string `json:"logo"` // data URI (ex: "data:image/png;base64,..."); "" remove a logo
 }
@@ -202,12 +200,7 @@ func (h *EstabelecimentoHandler) AtualizarLogo(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if len(input.Logo) > logoTamanhoMaximo {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "imagem muito grande (máximo ~1.5MB)"})
-		return
-	}
-	if input.Logo != "" && !strings.HasPrefix(input.Logo, "data:image/") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "formato de imagem inválido"})
+	if !validarImagemBase64(c, input.Logo) {
 		return
 	}
 

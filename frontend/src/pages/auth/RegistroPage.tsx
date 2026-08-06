@@ -30,7 +30,7 @@ export function RegistroPage() {
     try {
       await registro(nome, email, senha)
       toast.success("Conta criada! Sua página de agendamento já está pronta.")
-      navigate("/admin/agenda")
+      navigate("/admin/comecando")
     } catch (err) {
       setErro(err instanceof ApiError ? err.message : "Erro ao criar conta")
     } finally {

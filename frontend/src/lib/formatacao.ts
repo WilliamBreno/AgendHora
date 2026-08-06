@@ -2,6 +2,12 @@ export function formatarPreco(preco: number) {
   return preco.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 }
 
+// Serviços com preço variável (ex: depende do cabelo, do procedimento
+// escolhido na hora) mostram "A partir de R$X" em vez de um valor fechado.
+export function formatarPrecoServico(preco: number, aPartir: boolean) {
+  return aPartir ? `A partir de ${formatarPreco(preco)}` : formatarPreco(preco)
+}
+
 export function formatarDuracao(min: number) {
   if (min < 60) return `${min} min`
   const horas = Math.floor(min / 60)

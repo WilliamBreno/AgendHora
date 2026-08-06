@@ -5,6 +5,7 @@ import { IconesPadraoManager } from "@/components/configuracoes/IconesPadraoMana
 import { DadosEstabelecimentoForm } from "@/components/configuracoes/DadosEstabelecimentoForm"
 import { HorarioFuncionamentoEditor } from "@/components/configuracoes/HorarioFuncionamentoEditor"
 import { LogoUploadField } from "@/components/configuracoes/LogoUploadField"
+import { WhatsAppIntegracaoCard } from "@/components/configuracoes/WhatsAppIntegracaoCard"
 import { Button } from "@/components/ui/button"
 
 export function ConfiguracoesPage() {
@@ -87,6 +88,14 @@ export function ConfiguracoesPage() {
             />
           )}
         </div>
+      </section>
+
+      <section>
+        <h2 className="font-heading font-medium">Integrações</h2>
+        <p className="mt-1 mb-3 text-sm text-muted-foreground">
+          Outros canais pra automatizar o contato com seus clientes.
+        </p>
+        <WhatsAppIntegracaoCard />
       </section>
 
       <section className="rounded-xl border border-border bg-card p-5">

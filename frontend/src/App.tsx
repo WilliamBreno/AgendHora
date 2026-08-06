@@ -2,6 +2,8 @@ import { Navigate, Route, BrowserRouter, Routes } from "react-router-dom"
 import { AuthProvider } from "@/contexts/AuthContext"
 import { AdminLayout } from "@/components/layout/AdminLayout"
 import { RotaProtegida } from "@/components/layout/RotaProtegida"
+import { DashboardPage } from "@/pages/admin/DashboardPage"
+import { ComecandoPage } from "@/pages/admin/ComecandoPage"
 import { AgendaPage } from "@/pages/admin/AgendaPage"
 import { ServicosPage } from "@/pages/admin/ServicosPage"
 import { ConfiguracoesPage } from "@/pages/admin/ConfiguracoesPage"
@@ -20,7 +22,9 @@ function App() {
 
           <Route element={<RotaProtegida />}>
             <Route path="/admin" element={<AdminLayout />}>
-              <Route index element={<Navigate to="agenda" replace />} />
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="comecando" element={<ComecandoPage />} />
+              <Route path="dashboard" element={<DashboardPage />} />
               <Route path="agenda" element={<AgendaPage />} />
               <Route path="servicos" element={<ServicosPage />} />
               <Route path="configuracoes" element={<ConfiguracoesPage />} />

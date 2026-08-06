@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { DynamicIcon } from "@/lib/icons"
 import { CORES_SERVICO_CLASSES } from "@/lib/cores"
 import { cn } from "@/lib/utils"
-import { formatarDataExibicao, formatarPreco } from "@/lib/formatacao"
+import { formatarDataExibicao, formatarPrecoServico } from "@/lib/formatacao"
 import type { Agendamento, StatusAgendamento } from "@/types"
 
 interface AgendamentoDetailPanelProps {
@@ -77,7 +77,7 @@ export function AgendamentoDetailPanel({
                   <p className="font-medium">{agendamento.servico.nome}</p>
                   <p className="text-sm text-muted-foreground">
                     {agendamento.servico.duracao_min} min ·{" "}
-                    {formatarPreco(agendamento.servico.preco)}
+                    {formatarPrecoServico(agendamento.servico.preco, agendamento.servico.preco_a_partir)}
                   </p>
                 </div>
               </div>

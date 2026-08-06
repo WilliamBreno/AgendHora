@@ -14,10 +14,12 @@ export interface Servico {
   id: number
   nome: string
   preco: number
+  preco_a_partir: boolean
   duracao_min: number
   descricao: string
   cor: CorServico
   icone: string
+  foto: string
   estabelecimento_id: number
   created_at: string
   updated_at: string
@@ -26,10 +28,12 @@ export interface Servico {
 export interface ServicoInput {
   nome: string
   preco: number
+  preco_a_partir: boolean
   duracao_min: number
   descricao: string
   cor: CorServico
   icone: string
+  foto: string
 }
 
 export type StatusAgendamento = "pendente" | "confirmado" | "cancelado"
@@ -111,4 +115,40 @@ export interface EstabelecimentoPublico {
   logo: string
   telefone: string
   endereco: string
+}
+
+export interface PeriodoMetricas {
+  agendamentos: number
+  faturamento: number
+  ainda_vao_acontecer: number
+}
+
+export interface PontoGrafico {
+  data: string
+  valor: number
+}
+
+export interface RankingItem {
+  servico_id: number
+  nome: string
+  cor: CorServico
+  quantidade: number
+  faturamento: number
+}
+
+export interface Sugestao {
+  tipo: "alerta" | "incentivo"
+  titulo: string
+  descricao: string
+}
+
+export interface Dashboard {
+  hoje: PeriodoMetricas
+  semana: PeriodoMetricas
+  mes: PeriodoMetricas
+  grafico_7_dias: PontoGrafico[]
+  grafico_30_dias: PontoGrafico[]
+  ranking_quantidade: RankingItem[]
+  ranking_faturamento: RankingItem[]
+  sugestoes: Sugestao[]
 }

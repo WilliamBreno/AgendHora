@@ -1,7 +1,7 @@
 import { DynamicIcon } from "@/lib/icons"
 import { CORES_SERVICO_CLASSES } from "@/lib/cores"
 import { cn } from "@/lib/utils"
-import { formatarDuracao, formatarPreco } from "@/lib/formatacao"
+import { formatarDuracao, formatarPrecoServico } from "@/lib/formatacao"
 import type { Servico } from "@/types"
 
 interface ServicoSelecaoProps {
@@ -19,25 +19,36 @@ export function ServicoSelecao({ servicos, onSelecionar }: ServicoSelecaoProps) 
             key={servico.id}
             type="button"
             onClick={() => onSelecionar(servico)}
-            className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 text-left transition-shadow hover:shadow-md"
+            className="flex flex-col overflow-hidden rounded-xl border border-border bg-card text-left transition-shadow hover:shadow-md"
           >
-            <div
-              className={cn(
-                "flex size-11 shrink-0 items-center justify-center rounded-lg",
-                cores.bgSoft
-              )}
-            >
-              <DynamicIcon name={servico.icone} className={cn("size-5", cores.text)} />
-            </div>
-            <div className="flex-1">
-              <p className="font-heading font-semibold">{servico.nome}</p>
-              {servico.descricao && (
-                <p className="text-sm text-muted-foreground">{servico.descricao}</p>
-              )}
-              <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">{formatarPreco(servico.preco)}</span>
-                <span>·</span>
-                <span>{formatarDuracao(servico.duracao_min)}</span>
+            {servico.foto && (
+              <img
+                src={servico.foto}
+                alt={servico.nome}
+                className="h-32 w-full object-cover"
+              />
+            )}
+            <div className="flex flex-1 items-center gap-3 p-4">
+              <div
+                className={cn(
+                  "flex size-11 shrink-0 items-center justify-center rounded-lg",
+                  cores.bgSoft
+                )}
+              >
+                <DynamicIcon name={servico.icone} className={cn("size-5", cores.text)} />
+              </div>
+              <div className="flex-1">
+                <p className="font-heading font-semibold">{servico.nome}</p>
+                {servico.descricao && (
+                  <p className="text-sm text-muted-foreground">{servico.descricao}</p>
+                )}
+                <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">
+                    {formatarPrecoServico(servico.preco, servico.preco_a_partir)}
+                  </span>
+                  <span>·</span>
+                  <span>{formatarDuracao(servico.duracao_min)}</span>
+                </div>
               </div>
             </div>
           </button>

@@ -4,8 +4,10 @@ import {
   CalendarDays,
   CalendarRange,
   ExternalLink,
+  LayoutDashboard,
   LogOut,
   Menu,
+  Rocket,
   Settings,
   Sparkles,
 } from "lucide-react"
@@ -15,6 +17,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { useAuth } from "@/contexts/AuthContext"
 
 const NAV_ITEMS = [
+  { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/admin/agenda", label: "Agenda", icon: CalendarRange },
   { to: "/admin/servicos", label: "Serviços", icon: Sparkles },
   { to: "/admin/configuracoes", label: "Configurações", icon: Settings },
@@ -77,6 +80,13 @@ function RodapeConta() {
             <ExternalLink className="size-4" />
             Ver página pública
           </a>
+          <NavLink
+            to="/admin/comecando"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <Rocket className="size-4" />
+            Primeiros passos
+          </NavLink>
         </>
       )}
       <button

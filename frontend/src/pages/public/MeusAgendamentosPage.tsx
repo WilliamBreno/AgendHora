@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { usePublicoEstabelecimento } from "@/hooks/usePublicoEstabelecimento"
 import { useMeusAgendamentos } from "@/hooks/useMeusAgendamentos"
-import { formatarDataExibicao, formatarPreco } from "@/lib/formatacao"
+import { formatarDataExibicao, formatarPrecoServico } from "@/lib/formatacao"
 import { CORES_SERVICO_CLASSES } from "@/lib/cores"
 import { DynamicIcon } from "@/lib/icons"
 import { cn } from "@/lib/utils"
@@ -120,7 +120,8 @@ export function MeusAgendamentosPage() {
                   <div className="flex-1">
                     <p className="font-heading font-semibold">{ag.servico.nome}</p>
                     <p className="text-sm text-muted-foreground">
-                      {formatarDataExibicao(ag.data)} às {ag.hora} · {formatarPreco(ag.servico.preco)}
+                      {formatarDataExibicao(ag.data)} às {ag.hora} ·{" "}
+                      {formatarPrecoServico(ag.servico.preco, ag.servico.preco_a_partir)}
                     </p>
                     <p
                       className={cn(

@@ -2,7 +2,7 @@ import { MoreVertical, Pencil, Trash2 } from "lucide-react"
 import { DynamicIcon } from "@/lib/icons"
 import { CORES_SERVICO_CLASSES } from "@/lib/cores"
 import { cn } from "@/lib/utils"
-import { formatarDuracao, formatarPreco } from "@/lib/formatacao"
+import { formatarDuracao, formatarPrecoServico } from "@/lib/formatacao"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -26,14 +26,22 @@ export function ServicoCard({ servico, onEdit, onDelete }: ServicoCardProps) {
       <div className={cn("w-1.5 shrink-0", cores.bg)} />
       <div className="flex flex-1 items-start justify-between gap-3 p-4">
         <div className="flex items-start gap-3">
-          <div
-            className={cn(
-              "flex size-10 shrink-0 items-center justify-center rounded-lg",
-              cores.bgSoft
-            )}
-          >
-            <DynamicIcon name={servico.icone} className={cn("size-5", cores.text)} />
-          </div>
+          {servico.foto ? (
+            <img
+              src={servico.foto}
+              alt={servico.nome}
+              className="size-10 shrink-0 rounded-lg object-cover"
+            />
+          ) : (
+            <div
+              className={cn(
+                "flex size-10 shrink-0 items-center justify-center rounded-lg",
+                cores.bgSoft
+              )}
+            >
+              <DynamicIcon name={servico.icone} className={cn("size-5", cores.text)} />
+            </div>
+          )}
           <div>
             <h3 className="font-heading font-semibold">{servico.nome}</h3>
             {servico.descricao && (
@@ -41,7 +49,7 @@ export function ServicoCard({ servico, onEdit, onDelete }: ServicoCardProps) {
             )}
             <div className="mt-2 flex items-center gap-3 text-sm text-muted-foreground">
               <span className="font-heading font-medium text-foreground">
-                {formatarPreco(servico.preco)}
+                {formatarPrecoServico(servico.preco, servico.preco_a_partir)}
               </span>
               <span>·</span>
               <span>{formatarDuracao(servico.duracao_min)}</span>

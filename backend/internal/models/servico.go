@@ -15,14 +15,21 @@ var CoresServico = []string{
 
 // Servico é um serviço oferecido pelo estabelecimento (ex: corte, manicure, massagem).
 type Servico struct {
-	ID                uint    `gorm:"primaryKey" json:"id"`
-	Nome              string  `gorm:"not null" json:"nome"`
-	Preco             float64 `gorm:"not null" json:"preco"`
-	DuracaoMin        int     `gorm:"not null" json:"duracao_min"`
-	Descricao         string  `json:"descricao"`
-	Cor               string  `gorm:"not null" json:"cor"`
-	Icone             string  `json:"icone"`
-	EstabelecimentoID uint    `gorm:"not null;index" json:"estabelecimento_id"`
+	ID    uint    `gorm:"primaryKey" json:"id"`
+	Nome  string  `gorm:"not null" json:"nome"`
+	Preco float64 `gorm:"not null" json:"preco"`
+	// PrecoAPartir marca o preço como uma estimativa mínima ("a partir de
+	// R$X"), pra serviços cujo valor final varia (ex: depende do cabelo,
+	// do procedimento escolhido na hora etc).
+	PrecoAPartir bool   `gorm:"not null;default:false" json:"preco_a_partir"`
+	DuracaoMin   int    `gorm:"not null" json:"duracao_min"`
+	Descricao    string `json:"descricao"`
+	Cor          string `gorm:"not null" json:"cor"`
+	Icone        string `json:"icone"`
+	// Foto é opcional — uma imagem de exemplo do serviço, como data URI
+	// base64, mostrada pro cliente final na página pública.
+	Foto              string `json:"foto"`
+	EstabelecimentoID uint   `gorm:"not null;index" json:"estabelecimento_id"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

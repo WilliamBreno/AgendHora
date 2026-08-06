@@ -59,6 +59,7 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 	estabelecimentoHandler := handlers.NewEstabelecimentoHandler(db)
 	agendamentoHandler := handlers.NewAgendamentoHandler(db, notificador)
 	disponibilidadeHandler := handlers.NewDisponibilidadeHandler(db)
+	dashboardHandler := handlers.NewDashboardHandler(db)
 
 	apiGroup := router.Group("/api")
 	{
@@ -89,6 +90,8 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 			admin.PATCH("/agendamentos/:id/cancelar", agendamentoHandler.Cancelar)
 
 			admin.GET("/disponibilidade", disponibilidadeHandler.Listar)
+
+			admin.GET("/dashboard", dashboardHandler.Get)
 		}
 
 		publico := apiGroup.Group("/publico/:slug")

@@ -23,12 +23,14 @@ func NewServicoHandler(db *gorm.DB) *ServicoHandler {
 }
 
 type servicoInput struct {
-	Nome       string  `json:"nome" binding:"required"`
-	Preco      float64 `json:"preco" binding:"required,gt=0"`
-	DuracaoMin int     `json:"duracao_min" binding:"required,gt=0"`
-	Descricao  string  `json:"descricao"`
-	Cor        string  `json:"cor" binding:"required"`
-	Icone      string  `json:"icone"`
+	Nome         string  `json:"nome" binding:"required"`
+	Preco        float64 `json:"preco" binding:"required,gt=0"`
+	PrecoAPartir bool    `json:"preco_a_partir"`
+	DuracaoMin   int     `json:"duracao_min" binding:"required,gt=0"`
+	Descricao    string  `json:"descricao"`
+	Cor          string  `json:"cor" binding:"required"`
+	Icone        string  `json:"icone"`
+	Foto         string  `json:"foto"`
 }
 
 func validarCor(cor string) bool {
@@ -78,14 +80,19 @@ func (h *ServicoHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ícone inválido"})
 		return
 	}
+	if !validarImagemBase64(c, input.Foto) {
+		return
+	}
 
 	servico := models.Servico{
 		Nome:              strings.TrimSpace(input.Nome),
 		Preco:             input.Preco,
+		PrecoAPartir:      input.PrecoAPartir,
 		DuracaoMin:        input.DuracaoMin,
 		Descricao:         strings.TrimSpace(input.Descricao),
 		Cor:               input.Cor,
 		Icone:             input.Icone,
+		Foto:              input.Foto,
 		EstabelecimentoID: estabelecimentoID,
 	}
 	if err := h.DB.Create(&servico).Error; err != nil {
@@ -142,13 +149,18 @@ func (h *ServicoHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ícone inválido"})
 		return
 	}
+	if !validarImagemBase64(c, input.Foto) {
+		return
+	}
 
 	servico.Nome = strings.TrimSpace(input.Nome)
 	servico.Preco = input.Preco
+	servico.PrecoAPartir = input.PrecoAPartir
 	servico.DuracaoMin = input.DuracaoMin
 	servico.Descricao = strings.TrimSpace(input.Descricao)
 	servico.Cor = input.Cor
 	servico.Icone = input.Icone
+	servico.Foto = input.Foto
 
 	if err := h.DB.Save(servico).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao atualizar serviço"})

@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ColorPicker } from "@/components/servicos/ColorPicker"
 import { IconPickerField } from "@/components/servicos/IconPickerField"
+import { ImageUploadField } from "@/components/common/ImageUploadField"
 import { CORES_SERVICO, type CorServico, type Servico, type ServicoInput } from "@/types"
 
 interface ServicoFormDialogProps {
@@ -26,10 +27,12 @@ interface ServicoFormDialogProps {
 const FORM_VAZIO: ServicoInput = {
   nome: "",
   preco: 0,
+  preco_a_partir: false,
   duracao_min: 30,
   descricao: "",
   cor: CORES_SERVICO[0],
   icone: "",
+  foto: "",
 }
 
 export function ServicoFormDialog({
@@ -51,10 +54,12 @@ export function ServicoFormDialog({
         ? {
             nome: servico.nome,
             preco: servico.preco,
+            preco_a_partir: servico.preco_a_partir,
             duracao_min: servico.duracao_min,
             descricao: servico.descricao,
             cor: servico.cor,
             icone: servico.icone,
+            foto: servico.foto,
           }
         : FORM_VAZIO
     )
@@ -99,7 +104,7 @@ export function ServicoFormDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-4 py-2">
+          <div className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto py-2">
             <div className="grid gap-1.5">
               <Label htmlFor="nome">Nome</Label>
               <Input
@@ -137,6 +142,16 @@ export function ServicoFormDialog({
               </div>
             </div>
 
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={form.preco_a_partir}
+                onChange={(e) => setForm((f) => ({ ...f, preco_a_partir: e.target.checked }))}
+                className="size-4 rounded border-input accent-primary"
+              />
+              Preço variável (mostrar como "a partir de")
+            </label>
+
             <div className="grid gap-1.5">
               <Label htmlFor="descricao">Descrição</Label>
               <Textarea
@@ -162,6 +177,17 @@ export function ServicoFormDialog({
                 value={form.icone}
                 onChange={(icone) => setForm((f) => ({ ...f, icone }))}
                 iconesDisponiveis={iconesDisponiveis}
+              />
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label>Foto de exemplo (opcional)</Label>
+              <ImageUploadField
+                value={form.foto}
+                onChange={(foto) => setForm((f) => ({ ...f, foto }))}
+                trocarLabel="Trocar foto"
+                enviarLabel="Enviar foto"
+                ajuda="Mostrada pro cliente na página de agendamento."
               />
             </div>
 
