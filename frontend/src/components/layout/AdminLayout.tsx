@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
 import {
+  Ban,
   CalendarRange,
   ExternalLink,
   LayoutDashboard,
@@ -29,6 +30,7 @@ const NAV_ITEMS_BASE = [
 // empresa (ver CLAUDE.md).
 const NAV_ITEMS_DONO = [
   { to: "/admin/equipe", label: "Equipe", icon: Users },
+  { to: "/admin/bloqueios", label: "Bloqueios", icon: Ban },
   { to: "/admin/configuracoes", label: "Configurações", icon: Settings },
 ]
 

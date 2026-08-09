@@ -1,4 +1,5 @@
 import { NumberTicker } from "@/components/ui/number-ticker"
+import { formatarPreco } from "@/lib/formatacao"
 import type { PeriodoMetricas } from "@/types"
 
 interface MetricaCardProps {
@@ -13,6 +14,20 @@ export function MetricaCard({ titulo, metricas }: MetricaCardProps) {
       <p className="font-heading text-2xl font-semibold text-foreground">
         R$ <NumberTicker value={metricas.faturamento} decimalPlaces={2} />
       </p>
+      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <span>
+          <span className="font-medium text-servico-verde-salvia">
+            {formatarPreco(metricas.recebido)}
+          </span>{" "}
+          recebido
+        </span>
+        <span>
+          <span className="font-medium text-servico-ambar">
+            {formatarPreco(metricas.a_receber)}
+          </span>{" "}
+          a receber
+        </span>
+      </div>
       <div className="flex items-center gap-4 text-sm text-muted-foreground">
         <span>
           <NumberTicker value={metricas.agendamentos} className="font-medium text-foreground" />{" "}

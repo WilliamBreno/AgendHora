@@ -48,7 +48,7 @@ func emailClienteHTML(estabelecimento models.Estabelecimento, agendamento models
 	corpo := fmt.Sprintf(
 		`<p style="font-size:15px;margin:0 0 4px;">Olá, %s!</p>
 		<p style="font-size:15px;margin:0 0 4px;color:#44403c;">Seu horário em <strong>%s</strong> foi confirmado.</p>`,
-		agendamento.ClienteNome, estabelecimento.Nome,
+		agendamento.Cliente.Nome, estabelecimento.Nome,
 	)
 	corpo += tabelaDetalhes(
 		linhaDetalhe("Serviço", agendamento.Servico.Nome),
@@ -62,8 +62,8 @@ func emailClienteHTML(estabelecimento models.Estabelecimento, agendamento models
 func emailDonoHTML(estabelecimento models.Estabelecimento, agendamento models.Agendamento, dataFormatada string) string {
 	corpo := `<p style="font-size:15px;margin:0 0 4px;">Novo agendamento recebido:</p>`
 	corpo += tabelaDetalhes(
-		linhaDetalhe("Cliente", agendamento.ClienteNome),
-		linhaDetalhe("Telefone", agendamento.ClienteTelefone),
+		linhaDetalhe("Cliente", agendamento.Cliente.Nome),
+		linhaDetalhe("Telefone", agendamento.Cliente.Telefone),
 		linhaDetalhe("Serviço", agendamento.Servico.Nome),
 		linhaDetalhe("Data", dataFormatada),
 		linhaDetalhe("Horário", agendamento.Hora),
@@ -85,11 +85,25 @@ func emailConviteProfissionalHTML(estabelecimento models.Estabelecimento, link s
 	return envelope("Convite para "+estabelecimento.Nome, corpo)
 }
 
+func emailLembreteHTML(estabelecimento models.Estabelecimento, agendamento models.Agendamento, dataFormatada string) string {
+	corpo := fmt.Sprintf(
+		`<p style="font-size:15px;margin:0 0 4px;">Olá, %s!</p>
+		<p style="font-size:15px;margin:0 0 4px;color:#44403c;">Passando pra lembrar do seu horário em <strong>%s</strong> daqui a pouco.</p>`,
+		agendamento.Cliente.Nome, estabelecimento.Nome,
+	)
+	corpo += tabelaDetalhes(
+		linhaDetalhe("Serviço", agendamento.Servico.Nome),
+		linhaDetalhe("Data", dataFormatada),
+		linhaDetalhe("Horário", agendamento.Hora),
+	)
+	return envelope("Lembrete de agendamento", corpo)
+}
+
 func emailCancelamentoHTML(estabelecimento models.Estabelecimento, agendamento models.Agendamento, dataFormatada string) string {
 	corpo := fmt.Sprintf(
 		`<p style="font-size:15px;margin:0 0 4px;">Olá, %s.</p>
 		<p style="font-size:15px;margin:0 0 4px;color:#44403c;">Seu horário em <strong>%s</strong> foi cancelado.</p>`,
-		agendamento.ClienteNome, estabelecimento.Nome,
+		agendamento.Cliente.Nome, estabelecimento.Nome,
 	)
 	corpo += tabelaDetalhes(
 		linhaDetalhe("Serviço", agendamento.Servico.Nome),

@@ -9,6 +9,7 @@ import { AgendaPage } from "@/pages/admin/AgendaPage"
 import { ServicosPage } from "@/pages/admin/ServicosPage"
 import { ConfiguracoesPage } from "@/pages/admin/ConfiguracoesPage"
 import { EquipePage } from "@/pages/admin/EquipePage"
+import { BloqueiosPage } from "@/pages/admin/BloqueiosPage"
 import { RotaSomenteDono } from "@/components/layout/RotaSomenteDono"
 import { LoginPage } from "@/pages/auth/LoginPage"
 import { RegistroPage } from "@/pages/auth/RegistroPage"
@@ -36,6 +37,7 @@ function App() {
                 <Route element={<RotaSomenteDono />}>
                   <Route path="configuracoes" element={<ConfiguracoesPage />} />
                   <Route path="equipe" element={<EquipePage />} />
+                  <Route path="bloqueios" element={<BloqueiosPage />} />
                 </Route>
               </Route>
             </Route>

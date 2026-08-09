@@ -38,5 +38,21 @@ export function useAgendamentos(inicio: string, fim: string, profissionalId?: nu
     return atualizado
   }
 
-  return { agendamentos, loading, criar, cancelar, recarregar: carregar }
+  async function atualizarPago(id: number, pago: boolean) {
+    const atualizado = await apiAdmin.patch<Agendamento>(`/agendamentos/${id}/pago`, { pago })
+    setAgendamentos((atual) => atual.map((a) => (a.id === id ? atualizado : a)))
+    return atualizado
+  }
+
+  async function reagendar(id: number, data: string, hora: string, encaixe?: boolean) {
+    const atualizado = await apiAdmin.patch<Agendamento>(`/agendamentos/${id}/reagendar`, {
+      data,
+      hora,
+      encaixe,
+    })
+    setAgendamentos((atual) => atual.map((a) => (a.id === id ? atualizado : a)))
+    return atualizado
+  }
+
+  return { agendamentos, loading, criar, cancelar, atualizarPago, reagendar, recarregar: carregar }
 }

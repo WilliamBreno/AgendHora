@@ -85,3 +85,58 @@ export function ehMesAtual(ano: number, mes: number) {
   const hoje = dataDeHoje()
   return ano === hoje.ano && mes === hoje.mes
 }
+
+/** Constrói em horário local — evita o fuso desviar a data ao usar `new Date(iso)`. */
+export function parseISODate(dataISO: string): Date {
+  const [ano, mes, dia] = dataISO.split("-").map(Number)
+  return new Date(ano, mes - 1, dia)
+}
+
+export function somarDias(dataISO: string, quantidade: number): string {
+  const data = parseISODate(dataISO)
+  data.setDate(data.getDate() + quantidade)
+  return paraISODate(data.getFullYear(), data.getMonth(), data.getDate())
+}
+
+function paraDiaCalendario(dataISO: string): DiaCalendario {
+  const data = parseISODate(dataISO)
+  const hoje = dataDeHoje()
+  return {
+    data: dataISO,
+    dia: data.getDate(),
+    noMesAtual: true,
+    hoje:
+      data.getFullYear() === hoje.ano && data.getMonth() === hoje.mes && data.getDate() === hoje.dia,
+  }
+}
+
+/** Os 7 dias (dom-sáb) da semana que contém dataISO. */
+export function gerarSemana(dataISO: string): DiaCalendario[] {
+  const data = parseISODate(dataISO)
+  const inicio = new Date(data)
+  inicio.setDate(data.getDate() - data.getDay())
+
+  const dias: DiaCalendario[] = []
+  for (let i = 0; i < 7; i++) {
+    const cursor = new Date(inicio)
+    cursor.setDate(inicio.getDate() + i)
+    dias.push(paraDiaCalendario(paraISODate(cursor.getFullYear(), cursor.getMonth(), cursor.getDate())))
+  }
+  return dias
+}
+
+export function formatarIntervaloSemana(dias: DiaCalendario[]): string {
+  const primeiro = parseISODate(dias[0].data)
+  const ultimo = parseISODate(dias[6].data)
+  if (primeiro.getMonth() === ultimo.getMonth()) {
+    return `${primeiro.getDate()} – ${ultimo.getDate()} de ${MESES_PT[primeiro.getMonth()]} de ${ultimo.getFullYear()}`
+  }
+  return `${primeiro.getDate()} de ${MESES_PT[primeiro.getMonth()]} – ${ultimo.getDate()} de ${MESES_PT[ultimo.getMonth()]} de ${ultimo.getFullYear()}`
+}
+
+export function formatarDataPorExtenso(dataISO: string): string {
+  const data = parseISODate(dataISO)
+  const diaSemana = DIAS_SEMANA_EXTENSO_PT[data.getDay()]
+  const rotulo = diaSemana.charAt(0).toUpperCase() + diaSemana.slice(1)
+  return `${rotulo}, ${data.getDate()} de ${MESES_PT[data.getMonth()]}`
+}

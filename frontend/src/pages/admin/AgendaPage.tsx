@@ -10,9 +10,12 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { CalendarioMensal } from "@/components/agenda/CalendarioMensal"
+import { AgendaSemanal } from "@/components/agenda/AgendaSemanal"
+import { AgendaDiaria } from "@/components/agenda/AgendaDiaria"
 import { AgendamentoDetailPanel } from "@/components/agenda/AgendamentoDetailPanel"
 import { NovoAgendamentoDialog } from "@/components/agenda/NovoAgendamentoDialog"
 import { MeuHorarioDialog } from "@/components/agenda/MeuHorarioDialog"
+import { ReagendarDialog } from "@/components/agenda/ReagendarDialog"
 import { useAgendamentos } from "@/hooks/useAgendamentos"
 import { useServicos } from "@/hooks/useServicos"
 import { useEquipe } from "@/hooks/useEquipe"
@@ -21,28 +24,59 @@ import {
   dataDeHoje,
   descricaoHojePorExtenso,
   ehMesAtual,
+  formatarDataPorExtenso,
+  formatarIntervaloSemana,
   formatarMesAno,
   gerarGradeMensal,
+  gerarSemana,
+  paraISODate,
+  somarDias,
 } from "@/lib/calendario"
+import { cn } from "@/lib/utils"
 import { ApiError } from "@/lib/api"
 import type { Agendamento } from "@/types"
+
+type Visao = "mensal" | "semanal" | "diaria"
+
+const VISOES: { valor: Visao; label: string }[] = [
+  { valor: "mensal", label: "Mês" },
+  { valor: "semanal", label: "Semana" },
+  { valor: "diaria", label: "Dia" },
+]
 
 export function AgendaPage() {
   const { ehDono } = useAuth()
   const hoje = dataDeHoje()
+  const hojeISO = paraISODate(hoje.ano, hoje.mes, hoje.dia)
+
+  const [visao, setVisao] = useState<Visao>("mensal")
   const [ano, setAno] = useState(hoje.ano)
   const [mes, setMes] = useState(hoje.mes)
+  // âncora usada só pelas visões semanal/diária — independente de ano/mes,
+  // que continuam exclusivos da visão mensal (não mexe nela).
+  const [dataReferencia, setDataReferencia] = useState(hojeISO)
+
   const [agendamentoSelecionado, setAgendamentoSelecionado] = useState<Agendamento | null>(null)
   const [novoAberto, setNovoAberto] = useState(false)
   const [meuHorarioAberto, setMeuHorarioAberto] = useState(false)
+  const [reagendarAberto, setReagendarAberto] = useState(false)
   const [profissionalFiltro, setProfissionalFiltro] = useState<number | null>(null)
 
   const semanas = useMemo(() => gerarGradeMensal(ano, mes), [ano, mes])
-  const inicio = semanas[0][0].data
-  const fim = semanas[5][6].data
+  const diasSemana = useMemo(() => gerarSemana(dataReferencia), [dataReferencia])
+
+  const { inicio, fim } = useMemo(() => {
+    if (visao === "mensal") return { inicio: semanas[0][0].data, fim: semanas[5][6].data }
+    if (visao === "semanal") return { inicio: diasSemana[0].data, fim: diasSemana[6].data }
+    return { inicio: dataReferencia, fim: dataReferencia }
+  }, [visao, semanas, diasSemana, dataReferencia])
 
   const { equipe } = useEquipe(ehDono)
-  const { agendamentos, loading, cancelar, criar } = useAgendamentos(inicio, fim, profissionalFiltro)
+  const { agendamentos, loading, cancelar, criar, atualizarPago, reagendar } = useAgendamentos(
+    inicio,
+    fim,
+    profissionalFiltro
+  )
   const { servicos } = useServicos()
   const profissionais = equipe?.profissionais ?? []
 
@@ -56,6 +90,8 @@ export function AgendaPage() {
     }
     return mapa
   }, [agendamentos])
+
+  const agendamentosDoDia = agendamentosPorDia[dataReferencia] ?? []
 
   function irParaMesAnterior() {
     if (mes === 0) {
@@ -75,9 +111,22 @@ export function AgendaPage() {
     }
   }
 
+  function irParaAnterior() {
+    if (visao === "mensal") irParaMesAnterior()
+    else if (visao === "semanal") setDataReferencia((d) => somarDias(d, -7))
+    else setDataReferencia((d) => somarDias(d, -1))
+  }
+
+  function irParaProximo() {
+    if (visao === "mensal") irParaProximoMes()
+    else if (visao === "semanal") setDataReferencia((d) => somarDias(d, 7))
+    else setDataReferencia((d) => somarDias(d, 1))
+  }
+
   function irParaHoje() {
     setAno(hoje.ano)
     setMes(hoje.mes)
+    setDataReferencia(hojeISO)
   }
 
   async function handleCancelar(id: number) {
@@ -90,16 +139,59 @@ export function AgendaPage() {
     }
   }
 
+  async function handleAtualizarPago(id: number, pago: boolean) {
+    try {
+      const atualizado = await atualizarPago(id, pago)
+      setAgendamentoSelecionado(atualizado)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Erro ao atualizar pagamento")
+    }
+  }
+
+  // erros (incl. 409 de conflito) são tratados dentro do próprio
+  // ReagendarDialog — aqui só propaga e atualiza o painel de detalhe com o
+  // novo horário quando dá certo.
+  async function handleReagendar(id: number, data: string, hora: string, encaixe?: boolean) {
+    const atualizado = await reagendar(id, data, hora, encaixe)
+    setAgendamentoSelecionado(atualizado)
+    return atualizado
+  }
+
+  const titulo =
+    visao === "mensal"
+      ? formatarMesAno(ano, mes)
+      : visao === "semanal"
+        ? formatarIntervaloSemana(diasSemana)
+        : formatarDataPorExtenso(dataReferencia)
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="font-heading text-2xl font-semibold">{formatarMesAno(ano, mes)}</h1>
-          {ehMesAtual(ano, mes) && (
+          <h1 className="font-heading text-2xl font-semibold">{titulo}</h1>
+          {visao === "mensal" && ehMesAtual(ano, mes) && (
             <p className="text-sm text-muted-foreground">{descricaoHojePorExtenso()}</p>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-lg border border-border p-0.5">
+            {VISOES.map((v) => (
+              <button
+                key={v.valor}
+                type="button"
+                onClick={() => setVisao(v.valor)}
+                className={cn(
+                  "rounded-md px-3 py-1 text-sm font-medium transition-colors",
+                  visao === v.valor
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+
           {ehDono && profissionais.length > 1 && (
             <Select
               value={profissionalFiltro ? String(profissionalFiltro) : "todos"}
@@ -132,11 +224,13 @@ export function AgendaPage() {
           <Button variant="outline" size="sm" onClick={irParaHoje}>
             Hoje
           </Button>
-          <Button variant="outline" size="icon-sm" onClick={irParaMesAnterior}>
+          <Button variant="outline" size="icon-sm" onClick={irParaAnterior}>
             <ChevronLeft className="size-4" />
+            <span className="sr-only">Período anterior</span>
           </Button>
-          <Button variant="outline" size="icon-sm" onClick={irParaProximoMes}>
+          <Button variant="outline" size="icon-sm" onClick={irParaProximo}>
             <ChevronRight className="size-4" />
+            <span className="sr-only">Próximo período</span>
           </Button>
           <Button onClick={() => setNovoAberto(true)} className="ml-auto sm:ml-0">
             <Plus className="size-4" />
@@ -147,7 +241,7 @@ export function AgendaPage() {
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Carregando...</p>
-      ) : (
+      ) : visao === "mensal" ? (
         <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
           <CalendarioMensal
             semanas={semanas}
@@ -155,12 +249,31 @@ export function AgendaPage() {
             onAgendamentoClick={setAgendamentoSelecionado}
           />
         </div>
+      ) : visao === "semanal" ? (
+        <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          <AgendaSemanal
+            dias={diasSemana}
+            agendamentosPorDia={agendamentosPorDia}
+            onAgendamentoClick={setAgendamentoSelecionado}
+          />
+        </div>
+      ) : (
+        <AgendaDiaria agendamentos={agendamentosDoDia} onAgendamentoClick={setAgendamentoSelecionado} />
       )}
 
       <AgendamentoDetailPanel
         agendamento={agendamentoSelecionado}
         onOpenChange={(open) => !open && setAgendamentoSelecionado(null)}
         onCancelar={handleCancelar}
+        onAtualizarPago={handleAtualizarPago}
+        onReagendarClick={() => setReagendarAberto(true)}
+      />
+
+      <ReagendarDialog
+        open={reagendarAberto}
+        onOpenChange={setReagendarAberto}
+        agendamento={agendamentoSelecionado}
+        onReagendar={handleReagendar}
       />
 
       <NovoAgendamentoDialog

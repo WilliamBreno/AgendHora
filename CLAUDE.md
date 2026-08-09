@@ -1,8 +1,10 @@
-# CLAUDE.md — AgendHora
+# CLAUDE.md — Sistema de Agendamento
+
+> **Nota de sincronização**: este arquivo já passou por várias revisões numa conversa fora deste repositório. Antes de implementar qualquer item novo, confirme no código real (não só neste arquivo) o status de: **multi-tenant** (o backend/banco já é compartilhado entre múltiplos Estabelecimento, ou ainda é um deploy por cliente?) — essa resposta muda a prioridade do que vem a seguir. O item "Profissionais" já foi corrigido nesta versão a partir do que o código real mostrou (ver seção própria).
 
 ## Visão geral
 
-**AgendHora** ("Agendou. Pronto.") é um sistema de agendamento (booking) simples para estabelecimentos de serviço (ex: salão, barbearia, clínica de estética, studio). Dois lados:
+Sistema de agendamento (booking) simples para estabelecimentos de serviço (ex: salão, barbearia, clínica de estética, studio). Dois lados:
 
 - **Página pública**: o cliente final escolhe um serviço, vê horários disponíveis e agenda — sem precisar de login.
 - **Área administrativa** (autenticada): o dono do estabelecimento vê todos os agendamentos numa agenda mensal, cadastra os serviços que oferece e recebe notificação de cada novo agendamento.
@@ -20,20 +22,31 @@ CLAUDE.md    → este arquivo
 - **Backend**: Go (Gin) + GORM + PostgreSQL
 - **Frontend**: React 19 + TypeScript + Vite + Tailwind + shadcn/ui (Base UI, não Radix) + lucide-react
 - **Animação**: GSAP para as transições da agenda (troca de mês, abertura do painel de detalhe, stagger de listas de agendamentos). Magic UI só em 1–2 pontos pontuais de destaque (ex: contador animado no dashboard), nunca no fluxo operacional principal — mantém a área admin rápida e limpa.
-- **Notificações**: Brevo (e-mail, via API REST direta) e whatsmeow (WhatsApp) — troca feita a partir do Resend porque o plano grátis dele trava em 1 domínio verificado (o do Drenux já ocupa essa vaga) e o do Brevo não tem esse limite; implementar como service layer própria deste projeto, não importar código do Drenux.
+- **Notificações**: Resend (e-mail) por enquanto — mesmo serviço já usado no projeto Drenux, implementar como service layer própria deste projeto, não importar código do Drenux. WhatsApp (whatsmeow) fica pra depois, ver "Decisões que não mudar sem repensar"
 
 ## Escopo desta primeira versão
 
-**Decisão assumida**: mono-estabelecimento nesta v1 (diferente do Drenux, que é multi-tenant). O modelo de dados já guarda um registro `Estabelecimento` separado, para não travar uma evolução futura para multi-tenant/SaaS, mas a v1 não precisa resolver múltiplas contas, planos, nem onboarding de lojista. Se a intenção for outra, ajustar esta seção antes de começar.
+**Decisão revista**: o sistema é **multi-tenant desde a v1** — um backend e um banco só, compartilhados entre todos os estabelecimentos, do mesmo jeito que o Drenux já funciona. A decisão original (mono-estabelecimento, um backend por cliente) foi abandonada porque não fecha a conta com o preço de R$19,90/mês definido abaixo: hospedar um backend pago separado por cliente custa mais que a própria mensalidade dele. Com um backend só compartilhado, o custo de servidor não multiplica por cliente novo — é o que torna R$19,90/mês viável em escala.
+
+Isso não é um recomeço: o modelo de dados abaixo já guardava `estabelecimento_id` em cada tabela desde o início (decisão tomada de propósito, pra não travar essa evolução) — então virar multi-tenant agora é sobretudo uma questão de deploy (um serviço só) e de garantir que toda consulta ao banco filtra por `estabelecimento_id`, não uma reestruturação grande do modelo.
+
+## Modelo de negócio e preço
+
+- Plano único por enquanto: **R$19,90/mês**, tudo incluso — sem trava de funcionalidade por tier, sem comissão sobre o faturamento do estabelecimento (diferente do modelo do Drenux)
+- Posicionamento: bem abaixo dos concorrentes diretos do nicho (Trinks começa em R$65-89/mês, funcionalidade essencial só a partir de R$149-249/mês; Belezzia começa em R$199/mês) — o público-alvo é o profissional autônomo ou estabelecimento pequeno pra quem essas ferramentas são caras ou complexas demais
+- Cobrança: manual/Pix por enquanto (sem checkout automático nesta v1) — `Estabelecimento.ativo` (booleano) controla se o acesso está liberado, atualizado à mão até existir um fluxo de cobrança automática
+- Planos futuros com mais funcionalidades estão previstos, mas não fazem parte do escopo agora — por isso o campo `Estabelecimento.plano` (string, hoje sempre `"padrao"`) já existe no modelo, pra não exigir migration de dado quando os outros planos forem definidos
 
 ## Modelo de dados
 
-- **Estabelecimento**: nome, telefone, endereço (opcional), horário de funcionamento por dia da semana, `icones_padrao` (lista configurável de nomes de ícones lucide-react disponíveis no cadastro de serviço — ver seção "Ícones dos serviços")
-- **Usuario** (admin): email, senha (hash), estabelecimento_id
+- **Estabelecimento**: nome, `slug` (identifica a URL pública do estabelecimento), telefone, endereço (opcional), horário de funcionamento por dia da semana, `plano` (string, hoje sempre `"padrao"`), `ativo` (booleano, controla acesso enquanto a cobrança é manual), `icones_padrao` (lista configurável de nomes de ícones lucide-react disponíveis no cadastro de serviço — ver seção "Ícones dos serviços")
+- **Usuario** (login): email, senha (hash), `papel` (`dono` | `auxiliar`), horário de trabalho, estabelecimento_id — auxiliares são convidados por e-mail e viram "profissionais" com login e agenda próprios (confirmado já implementado no código real; não criar uma tabela `Profissional` separada)
 - **Servico**: nome, preco, duracao_min, descricao, cor (chave de uma paleta fixa — ver abaixo), icone, estabelecimento_id
-- **Agendamento**: cliente_nome, cliente_telefone, servico_id, data, hora, status (`pendente` | `confirmado` | `cancelado`), observacoes, estabelecimento_id
+- **Cliente**: nome, telefone (identifica o cliente dentro do estabelecimento), estabelecimento_id — criado/atualizado automaticamente a cada novo agendamento, sem precisar de cadastro manual separado
+- **Agendamento**: cliente_id, servico_id, profissional_id (referencia `Usuario`, não uma tabela `Profissional` separada), data, hora, status (`pendente` | `confirmado` | `cancelado`), pago (booleano), observacoes, estabelecimento_id
+- **Bloqueio**: data, hora_inicio, hora_fim (nulo = dia inteiro), motivo (opcional), profissional_id (nulo = bloqueia o estabelecimento inteiro), estabelecimento_id — usado pra folga, almoço, férias etc.; entra no mesmo cálculo de disponibilidade que já existe pros agendamentos, não é um sistema separado
 
-Cliente não precisa de tabela própria na v1 — nome e telefone ficam direto no Agendamento. Reavaliar isso se precisar de histórico por cliente no futuro (ex: "cliente já veio antes").
+Como o sistema é multi-tenant, **toda consulta ao banco precisa filtrar por `estabelecimento_id`** (vindo do JWT do admin logado, ou do estabelecimento selecionado na página pública) — nunca listar ou buscar sem esse filtro. Vale considerar um middleware que injeta esse filtro automaticamente, pra não depender de lembrar disso em cada rota nova.
 
 ## Paleta e tipografia
 
@@ -57,22 +70,22 @@ Dúvida resolvida: **ninguém precisa confirmar manualmente** no fluxo padrão. 
 (Se a ideia original era o dono revisar cada agendamento antes de confirmar, é só avisar que esse padrão se inverte.)
 
 ### 1. Página pública de agendamento (cliente final)
+- Cada estabelecimento tem sua própria URL pública (ex: `/agendar/nome-do-estabelecimento`, via um campo `slug` no Estabelecimento) — é assim que o sistema sabe qual estabelecimento está sendo agendado, já que agora vários dividem o mesmo backend
 - Lista os serviços em cards coloridos (sem necessidade de login)
-- Ao escolher um serviço: seletor de data + horários livres daquele dia, calculando disponibilidade a partir da duração do serviço, do horário de funcionamento do estabelecimento e dos agendamentos já existentes
+- Ao escolher um serviço: se o estabelecimento tem mais de um profissional ativo, mostra um passo extra pra escolher com quem (senão pula direto, sem perguntar); depois, seletor de data + horários livres daquele dia, calculando disponibilidade a partir da duração do serviço, do horário de funcionamento, dos Agendamentos e dos Bloqueios já existentes
 - Formulário: nome, telefone, observações (opcional)
 - Ao confirmar: cria o Agendamento já como `confirmado` (ver "Fluxo de confirmação do agendamento" acima), dispara notificação de confirmação pro cliente e notificação pro dono
 
 ### 2. Área administrativa (autenticada)
 - Login simples (email + senha, JWT)
 - **Cabeçalho da agenda**: mostra o mês e o ano (ex: "Julho de 2026"); quando o mês exibido é o mês atual, mostrar também o dia de hoje por extenso (ex: "Hoje é sexta-feira, dia 24"); cada linha da grade (semana) leva um rótulo indicando a semana do mês (Semana 1, Semana 2, Semana 3...) — hoje o protótipo só mostra mês e ano, sem esse detalhe
-- **Agenda mensal**: grade do mês, navegação entre meses, dia atual destacado, cada agendamento como pílula colorida (cor = cor do serviço); dias com muitos agendamentos mostram "+N mais"
-- Clicar num agendamento abre um **painel lateral** com: cliente (nome, telefone), serviço, data/hora, duração, preço, status, observações
-- Ação de cancelar um agendamento direto no painel de detalhe (e de aceitar/recusar, só se o modo opcional de aprovação manual — ver seção de fluxo de confirmação — estiver ativado)
+- **Agenda com três visões — mensal, semanal e diária** (alternável): grade do mês (a que já existe no protótipo), navegação entre meses/semanas/dias, dia atual destacado, cada agendamento como pílula colorida (cor = cor do serviço); dias com muitos agendamentos mostram "+N mais". Semanal e diária são visões novas, reaproveitando os mesmos componentes de pílula e painel de detalhe já validados
+- Clicar num agendamento abre um **painel lateral** com: cliente (nome, telefone), profissional responsável, serviço, data/hora, duração, preço, status, se já está pago, observações
+- Ações no painel de detalhe: cancelar, reagendar (ver seção "Bloqueio de horários e reagendamento"), marcar como pago, e aceitar/recusar só se o modo opcional de aprovação manual estiver ativado
 - **Cadastro de serviços**: listagem em cards com barra de cor lateral; criar/editar/excluir; campos nome, preço, duração, descrição, cor (paleta fixa de 6) e ícone
 
 ### 3. Notificações
-- Cliente: e-mail (Brevo) e/ou WhatsApp (whatsmeow) de confirmação assim que agenda
-- Dono: notificação a cada novo agendamento (mesmo canal, ou indicador simples dentro do admin)
+- **Só e-mail por enquanto (Resend)** — confirmação pro cliente assim que agenda, e aviso pro dono a cada novo agendamento. WhatsApp (whatsmeow) fica de fora deste momento por decisão do dono do projeto — ver "Decisões que não mudar sem repensar"
 
 ### 4. Dashboard (visão geral do estabelecimento)
 - Cards de resumo com métricas de hoje, da semana e do mês: nº de agendamentos confirmados, faturamento (soma dos preços dos serviços agendados no período) e nº de agendamentos que ainda vão acontecer no período (hoje, na semana, no mês)
@@ -97,6 +110,35 @@ Esta é a tela onde mais faz sentido usar bibliotecas de efeito visual (nas outr
 
 Existe um protótipo funcional em React (`agenda-estabelecimento.jsx`, entregue junto com este arquivo) já validado com o usuário — cobre a agenda mensal, o painel de detalhe e o cadastro de serviços. Usar como referência de **comportamento e hierarquia visual**, não como código final: ele usa Tailwind solto, sem shadcn de fato, e as animações são feitas em CSS (no projeto real, essas mesmas transições devem ser implementadas com GSAP).
 
+## Profissionais
+
+**Correção importante (confirmada pelo Claude Code direto no código real): isso já está construído, e de um jeito melhor do que a proposta original desta seção.** Não existe uma entidade `Profissional` simples — profissional é o próprio `Usuario` que faz login, com um campo `Papel` (`dono` | `auxiliar`). Cadastrar um profissional novo hoje é convidar por e-mail: a pessoa recebe um link, cria a própria senha, ganha login e vê a própria agenda. `Agendamento.ProfissionalID` já existe e já aponta pra esse `Usuario`, com horário de trabalho próprio e disponibilidade pública considerando seleção de profissional quando há mais de um.
+
+- Não criar a tabela `Profissional` separada — é redundante com `Usuario`/`Papel`, que já resolve isso e já está em uso pelo fluxo inteiro (convite, agenda própria, disponibilidade)
+- O comportamento de "só mostrar seletor de profissional na página pública quando há mais de um ativo" já parece estar implementado (Claude Code mencionou "disponibilidade pública com seleção de profissional") — confirmar antes de mexer, não reconstruir
+- Segue sem limite de quantidade de auxiliares por enquanto, mesma lógica de antes (só um plano, tudo incluso)
+
+## Clientes
+
+- Tela simples em admin listando os clientes já atendidos (nome, telefone, quantos agendamentos já fez) — vem de graça a partir da tabela `Cliente` nova, sem cadastro manual: todo agendamento novo cria ou atualiza o registro do cliente automaticamente, casando por telefone dentro do mesmo estabelecimento
+- "Cadastro ilimitado de clientes" do comparativo não é uma funcionalidade a construir à parte — é uma consequência de não ter nenhum limite artificial nessa tabela, o que já é o caso por padrão
+
+## Bloqueio de horários e reagendamento
+
+- **Bloqueio de horários**: tela simples pro dono marcar um período como indisponível (folga, almoço, feriado) — usa a entidade `Bloqueio` já descrita no modelo de dados. O cálculo de horários livres da página pública passa a considerar Bloqueio junto com os Agendamentos já existentes, como mais uma fonte de "horário ocupado"
+- **Reagendamento**: novo botão "Reagendar" no painel de detalhe do agendamento (admin) — abre o mesmo seletor de data/horário da página pública, mantendo cliente e serviço, só troca data/hora do registro existente (não cria um novo)
+
+## Financeiro simples e relatórios
+
+- Cada agendamento ganha um campo `pago` (booleano) — marcável direto no painel de detalhe, ao lado do status
+- Dashboard passa a separar "recebido" de "a receber" dentro do faturamento do período, usando esse campo
+- Relatório básico: botão de exportar CSV dos agendamentos do período selecionado no dashboard (data, cliente, serviço, valor, pago ou não) — não é uma tela nova, é uma ação em cima dos dados que o dashboard já calcula
+
+## Lembretes automáticos
+
+- Envio de e-mail (Resend) algumas horas antes do horário marcado, lembrando o cliente do agendamento — **só e-mail por enquanto**, sem WhatsApp (ver decisão abaixo)
+- Precisa de uma tarefa agendada (cron) rodando diariamente/de hora em hora pra verificar quais agendamentos estão próximos e ainda não receberam lembrete — é a primeira peça de infraestrutura do projeto que não é só "responder a um pedido HTTP", vale planejar como um serviço/rotina separada do resto da API
+
 ## Ícones dos serviços
 
 Dois pontos a construir (escopo confirmado, não é mais só uma pendência):
@@ -108,19 +150,26 @@ No protótipo visual que já existe, os ícones dos serviços de exemplo foram e
 
 ## Fases sugeridas
 
-1. Setup do repositório (backend Go + frontend Vite), banco de dados e migrations
-2. Modelo + CRUD de Servico (API e tela admin)
-3. CRUD de Agendamento + agenda mensal no admin (ainda sem notificação)
-4. Página pública de agendamento + cálculo de disponibilidade de horários
-5. Notificações (e-mail e WhatsApp)
+1. Setup do repositório (backend Go + frontend Vite), banco de dados e migrations — já incluindo `estabelecimento_id` em todas as tabelas e o filtro multi-tenant desde o primeiro CRUD
+2. Modelo + CRUD de Servico e Profissional (API e tela admin)
+3. CRUD de Agendamento (com profissional e cliente) + agenda mensal no admin (ainda sem notificação)
+4. Página pública de agendamento + cálculo de disponibilidade (considerando Bloqueio desde já)
+5. Notificações por e-mail (confirmação + aviso pro dono)
 6. Autenticação do admin + deploy
 7. Dashboard: métricas agregadas (agendamentos e faturamento por dia/semana/mês) + motor de sugestões
+8. Agenda semanal/diária, reagendamento, tela de Bloqueio de horários
+9. Tela de Clientes, campo `pago` + separação recebido/a receber no dashboard, exportação CSV
+10. Lembretes automáticos por e-mail (cron)
 
 ## Decisões que não mudar sem repensar
 
 - Cores de serviço vêm de uma paleta fixa de 6, não são livres — é o que mantém a agenda organizada e legível
 - Cliente final nunca precisa de login pra agendar
-- v1 é mono-estabelecimento; virar multi-tenant é uma decisão de arquitetura separada, não um incremento simples
+- Sistema é multi-tenant desde a v1 — um backend e um banco compartilhados entre todos os estabelecimentos, nunca um deploy por cliente; é o que faz o preço de R$19,90/mês se sustentar em escala
+- Toda consulta ao banco filtra por `estabelecimento_id` — sem exceção, mesmo em rotas novas
 - Agendamento nasce `confirmado` por padrão (self-service); aprovação manual do dono é um interruptor opcional futuro, não o comportamento padrão
 - Ícones disponíveis no cadastro de serviço vêm de uma lista configurável pelo dono (`icones_padrao`), não de um array fixo no código
 - Sugestões do dashboard vêm de regras determinísticas sobre dados reais do próprio estabelecimento, não de IA generativa — mantém previsível, explicável e sem custo de API
+- Profissional é o próprio `Usuario` com `papel` auxiliar (login, agenda e horário próprios) — confirmado já implementado; não criar tabela `Profissional` separada
+- WhatsApp (confirmação e lembretes) fica de fora por decisão do dono do projeto — notificações são só por e-mail até segunda ordem
+- Integração com Google Agenda ficou fora desta rodada de melhorias — é a peça mais cara de construir (OAuth, API externa, tokens por estabelecimento) e a que menos diferencia o produto pro público-alvo (autônomos/pequenos negócios) comparado a ter a experiência principal rápida e bem feita; reavaliar quando o produto já tiver clientes pagantes validando o resto

@@ -52,6 +52,7 @@ export interface Agendamento {
   status: StatusAgendamento
   observacoes: string
   encaixe: boolean
+  pago: boolean
   estabelecimento_id: number
   created_at: string
   updated_at: string
@@ -103,6 +104,28 @@ export interface ConvitePendente {
 export interface Equipe {
   profissionais: Usuario[]
   convites_pendentes: ConvitePendente[]
+}
+
+// Bloqueio marca um período indisponível pra agendar (folga, almoço,
+// feriado). hora_inicio/hora_fim vazios (os dois) = dia inteiro.
+// profissional_id nulo = bloqueia o estabelecimento inteiro.
+export interface Bloqueio {
+  id: number
+  data: string // "YYYY-MM-DD"
+  hora_inicio: string
+  hora_fim: string
+  motivo: string
+  profissional_id: number | null
+  profissional_nome: string
+  created_at: string
+}
+
+export interface BloqueioInput {
+  data: string
+  hora_inicio: string
+  hora_fim: string
+  motivo: string
+  profissional_id: number | null
 }
 
 // Chaves sem acento — precisam bater com models.DiasSemana no backend.
@@ -170,6 +193,8 @@ export interface EstabelecimentoPublico {
 export interface PeriodoMetricas {
   agendamentos: number
   faturamento: number
+  recebido: number
+  a_receber: number
   ainda_vao_acontecer: number
 }
 

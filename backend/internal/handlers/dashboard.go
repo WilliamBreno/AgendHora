@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/csv"
 	"fmt"
 	"net/http"
 	"strings"
@@ -26,8 +27,12 @@ func NewDashboardHandler(db *gorm.DB) *DashboardHandler {
 }
 
 type periodoMetricas struct {
-	Agendamentos      int     `json:"agendamentos"`
-	Faturamento       float64 `json:"faturamento"`
+	Agendamentos int     `json:"agendamentos"`
+	Faturamento  float64 `json:"faturamento"`
+	// Recebido/AReceber separam o faturamento do período usando o campo
+	// Pago de cada agendamento — a soma dos dois sempre bate com Faturamento.
+	Recebido          float64 `json:"recebido"`
+	AReceber          float64 `json:"a_receber"`
 	AindaVaoAcontecer int     `json:"ainda_vao_acontecer"`
 }
 
@@ -115,6 +120,69 @@ func (h *DashboardHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, resposta)
 }
 
+// CSV exporta os agendamentos confirmados de um dos períodos que os cards
+// do dashboard já calculam (hoje/semana/mês) — não é uma tela nova, é uma
+// ação em cima dos mesmos dados. Mesma regra de escopo do resto do
+// dashboard: auxiliar só exporta a própria agenda.
+func (h *DashboardHandler) CSV(c *gin.Context) {
+	estabelecimentoID := auth.EstabelecimentoID(c)
+
+	agora := time.Now()
+	hoje := time.Date(agora.Year(), agora.Month(), agora.Day(), 0, 0, 0, 0, time.UTC)
+
+	var inicio, fim time.Time
+	switch c.Query("periodo") {
+	case "hoje":
+		inicio, fim = hoje, hoje
+	case "semana":
+		inicio, fim = inicioSemana(hoje), fimSemana(hoje)
+	case "mes":
+		inicio = time.Date(hoje.Year(), hoje.Month(), 1, 0, 0, 0, 0, time.UTC)
+		fim = inicio.AddDate(0, 1, -1)
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "parâmetro 'periodo' inválido — use hoje, semana ou mes"})
+		return
+	}
+
+	query := h.DB.Preload("Servico").Preload("Cliente").
+		Where(
+			"estabelecimento_id = ? AND status = ? AND data >= ? AND data <= ?",
+			estabelecimentoID, models.StatusConfirmado, inicio, fim,
+		)
+	if auth.Papel(c) == models.PapelAuxiliar {
+		query = query.Where("profissional_id = ?", auth.UsuarioID(c))
+	}
+
+	var agendamentos []models.Agendamento
+	if err := query.Order("data asc, hora asc").Find(&agendamentos).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao gerar relatório"})
+		return
+	}
+
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", `attachment; filename="agendamentos.csv"`)
+
+	// ';' em vez de ',' — é o separador que o Excel em pt-BR espera por
+	// padrão (a vírgula já é o separador decimal nesse locale).
+	writer := csv.NewWriter(c.Writer)
+	writer.Comma = ';'
+	writer.Write([]string{"Data", "Cliente", "Serviço", "Valor", "Pago"})
+	for _, a := range agendamentos {
+		pago := "Não"
+		if a.Pago {
+			pago = "Sim"
+		}
+		writer.Write([]string{
+			a.Data.Format("02/01/2006"),
+			a.Cliente.Nome,
+			a.Servico.Nome,
+			formatarReais(a.Servico.Preco),
+			pago,
+		})
+	}
+	writer.Flush()
+}
+
 func inicioSemana(dia time.Time) time.Time {
 	return dia.AddDate(0, 0, -int(dia.Weekday()))
 }
@@ -139,6 +207,11 @@ func metricasPeriodo(agendamentos []models.Agendamento, inicio, fim, agora time.
 		}
 		m.Agendamentos++
 		m.Faturamento += a.Servico.Preco
+		if a.Pago {
+			m.Recebido += a.Servico.Preco
+		} else {
+			m.AReceber += a.Servico.Preco
+		}
 		if momentoAgendamento(a).After(agora) {
 			m.AindaVaoAcontecer++
 		}

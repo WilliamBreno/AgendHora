@@ -62,6 +62,7 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 	dashboardHandler := handlers.NewDashboardHandler(db)
 	profissionalHandler := handlers.NewProfissionalHandler(db, gerenciador, notificador, frontendURL)
 	usuarioHandler := handlers.NewUsuarioHandler(db)
+	bloqueioHandler := handlers.NewBloqueioHandler(db)
 
 	apiGroup := router.Group("/api")
 	{
@@ -114,10 +115,19 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 			admin.POST("/agendamentos", agendamentoHandler.Create)
 			admin.GET("/agendamentos/:id", agendamentoHandler.Get)
 			admin.PATCH("/agendamentos/:id/cancelar", agendamentoHandler.Cancelar)
+			admin.PATCH("/agendamentos/:id/pago", agendamentoHandler.AtualizarPago)
+			admin.PATCH("/agendamentos/:id/reagendar", agendamentoHandler.Reagendar)
 
 			admin.GET("/disponibilidade", disponibilidadeHandler.Listar)
 
+			// tela simples pro dono marcar um período indisponível (folga,
+			// almoço, feriado) — entra no cálculo de disponibilidade acima.
+			admin.GET("/bloqueios", authpkg.ExigirDono(), bloqueioHandler.List)
+			admin.POST("/bloqueios", authpkg.ExigirDono(), bloqueioHandler.Create)
+			admin.DELETE("/bloqueios/:id", authpkg.ExigirDono(), bloqueioHandler.Delete)
+
 			admin.GET("/dashboard", dashboardHandler.Get)
+			admin.GET("/dashboard/csv", dashboardHandler.CSV)
 		}
 
 		publico := apiGroup.Group("/publico/:slug")

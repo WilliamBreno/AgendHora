@@ -48,9 +48,9 @@ func (n *Notificador) NotificarNovoAgendamento(estabelecimento models.Estabeleci
 
 	dataFormatada := agendamento.Data.Format("02/01/2006")
 
-	if agendamento.ClienteEmail != "" {
+	if agendamento.Cliente.Email != "" {
 		n.enviar(
-			agendamento.ClienteEmail,
+			agendamento.Cliente.Email,
 			"Agendamento confirmado — "+estabelecimento.Nome,
 			emailClienteHTML(estabelecimento, agendamento, dataFormatada),
 		)
@@ -59,21 +59,37 @@ func (n *Notificador) NotificarNovoAgendamento(estabelecimento models.Estabeleci
 	if estabelecimento.Email != "" {
 		n.enviar(
 			estabelecimento.Email,
-			"Novo agendamento: "+agendamento.ClienteNome,
+			"Novo agendamento: "+agendamento.Cliente.Nome,
 			emailDonoHTML(estabelecimento, agendamento, dataFormatada),
 		)
 	}
 }
 
 func (n *Notificador) NotificarCancelamento(estabelecimento models.Estabelecimento, agendamento models.Agendamento) {
-	if n == nil || agendamento.ClienteEmail == "" {
+	if n == nil || agendamento.Cliente.Email == "" {
 		return
 	}
 	dataFormatada := agendamento.Data.Format("02/01/2006")
 	n.enviar(
-		agendamento.ClienteEmail,
+		agendamento.Cliente.Email,
 		"Agendamento cancelado — "+estabelecimento.Nome,
 		emailCancelamentoHTML(estabelecimento, agendamento, dataFormatada),
+	)
+}
+
+// NotificarLembrete manda o lembrete automático algumas horas antes do
+// horário marcado (ver internal/lembretes, que decide quando chamar isso).
+// Sem e-mail cadastrado do cliente, não há lembrete possível — só o
+// e-mail de confirmação, que também vai pro dono, é obrigatório hoje.
+func (n *Notificador) NotificarLembrete(estabelecimento models.Estabelecimento, agendamento models.Agendamento) {
+	if n == nil || agendamento.Cliente.Email == "" {
+		return
+	}
+	dataFormatada := agendamento.Data.Format("02/01/2006")
+	n.enviar(
+		agendamento.Cliente.Email,
+		"Lembrete: seu horário é daqui a pouco — "+estabelecimento.Nome,
+		emailLembreteHTML(estabelecimento, agendamento, dataFormatada),
 	)
 }
 

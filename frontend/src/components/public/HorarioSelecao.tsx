@@ -1,30 +1,28 @@
-import { useDisponibilidade } from "@/hooks/useDisponibilidade"
 import { DatePickerPopover } from "@/components/public/DatePickerPopover"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
-import type { Servico } from "@/types"
 
 interface HorarioSelecaoProps {
-  slug: string
-  servico: Servico
-  profissionalId: number
+  horarios: string[]
+  loading: boolean
   data: string
   hora: string
   onDataChange: (data: string) => void
   onHoraChange: (hora: string) => void
 }
 
+// Puramente apresentacional — quem usa (página pública ou reagendamento no
+// admin) é quem busca os horários (fontes diferentes: pública x
+// autenticada) e passa horarios/loading prontos. Assim os dois fluxos
+// reaproveitam o mesmo seletor de verdade, não uma cópia parecida.
 export function HorarioSelecao({
-  slug,
-  servico,
-  profissionalId,
+  horarios,
+  loading,
   data,
   hora,
   onDataChange,
   onHoraChange,
 }: HorarioSelecaoProps) {
-  const { horarios, loading } = useDisponibilidade(slug, servico.id, profissionalId, data)
-
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-1.5">

@@ -6,6 +6,7 @@ import (
 	"agendamento/backend/internal/api"
 	"agendamento/backend/internal/config"
 	"agendamento/backend/internal/database"
+	"agendamento/backend/internal/lembretes"
 	"agendamento/backend/internal/notifications"
 )
 
@@ -16,8 +17,10 @@ func main() {
 	database.Migrate(db)
 	database.MigrarSlugsLegados(db)
 	database.MigrarProfissionais(db)
+	database.MigrarClientes(db)
 
 	notificador := notifications.New(cfg.BrevoAPIKey, cfg.EmailRemetenteNome, cfg.EmailRemetente)
+	lembretes.Iniciar(db, notificador)
 
 	router := api.NewRouter(db, cfg.JWTSecret, notificador, cfg.AllowedOrigins, cfg.FrontendURL)
 

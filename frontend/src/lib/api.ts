@@ -91,6 +91,32 @@ export const apiAdmin = {
   delete: <T>(path: string) => requestAdmin<T>(path, { method: "DELETE" }),
 }
 
+// baixarArquivoAdmin é pra respostas que não são JSON (ex: exportação CSV) —
+// o helper `request` acima sempre tenta `.json()`, então essa rota precisa
+// de um caminho próprio: busca com o Bearer token, pega como blob e dispara
+// o download no navegador via um link temporário.
+export async function baixarArquivoAdmin(path: string, nomeArquivo: string) {
+  const token = getToken()
+  const response = await fetch(`${API_URL}/api/admin${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new ApiError(body?.error ?? `Erro ${response.status} ao exportar`, response.status)
+  }
+
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = nomeArquivo
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
 // apiPublico: página de agendamento do cliente — nunca precisa de login,
 // só sabe de qual empresa é o pedido pelo slug na URL.
 export function apiPublico(slug: string) {

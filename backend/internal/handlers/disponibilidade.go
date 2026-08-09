@@ -102,6 +102,32 @@ func (h *DisponibilidadeHandler) Listar(c *gin.Context) {
 		return
 	}
 
+	// Bloqueio entra no mesmo cálculo que os Agendamentos, como mais uma
+	// fonte de "horário ocupado" — sem profissional_id bloqueia o
+	// estabelecimento inteiro, então vale tanto pra esse profissional
+	// quanto pra qualquer outro.
+	var bloqueiosDia []models.Bloqueio
+	if err := h.DB.Where(
+		"estabelecimento_id = ? AND data = ? AND (profissional_id IS NULL OR profissional_id = ?)",
+		estabelecimentoID, data, profissionalID,
+	).Find(&bloqueiosDia).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao verificar bloqueios"})
+		return
+	}
+	for _, b := range bloqueiosDia {
+		if b.HoraInicio == "" && b.HoraFim == "" {
+			// bloqueio de dia inteiro — nenhum horário fica disponível
+			c.JSON(http.StatusOK, gin.H{"horarios": []string{}})
+			return
+		}
+		inicioBloqueio, err1 := minutosDoDia(b.HoraInicio)
+		fimBloqueio, err2 := minutosDoDia(b.HoraFim)
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		ocupados = append(ocupados, intervaloOcupado{inicio: inicioBloqueio, fim: fimBloqueio})
+	}
+
 	// hoje: não oferecer horário que já passou
 	limiteHoje := -1
 	agora := time.Now()

@@ -13,6 +13,7 @@ import { ThemeToggle } from "@/components/common/ThemeToggle"
 import { usePublicoServicos } from "@/hooks/usePublicoServicos"
 import { usePublicoEstabelecimento } from "@/hooks/usePublicoEstabelecimento"
 import { usePublicoProfissionais } from "@/hooks/usePublicoProfissionais"
+import { useDisponibilidade } from "@/hooks/useDisponibilidade"
 import { apiPublico, ApiError } from "@/lib/api"
 import type { Agendamento, ProfissionalPublico, Servico } from "@/types"
 
@@ -35,6 +36,13 @@ export function AgendarPage() {
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [agendamento, setAgendamento] = useState<Agendamento | null>(null)
+
+  const { horarios, loading: carregandoHorarios } = useDisponibilidade(
+    slug,
+    servico?.id ?? null,
+    profissional?.id ?? null,
+    data
+  )
 
   const conteudoRef = useRef<HTMLDivElement>(null)
 
@@ -180,9 +188,8 @@ export function AgendarPage() {
         {etapa === "horario" && servico && profissional && (
           <div className="flex flex-col gap-4">
             <HorarioSelecao
-              slug={slug}
-              servico={servico}
-              profissionalId={profissional.id}
+              horarios={horarios}
+              loading={carregandoHorarios}
               data={data}
               hora={hora}
               onDataChange={setData}

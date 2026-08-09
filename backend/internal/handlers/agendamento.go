@@ -40,9 +40,12 @@ type agendamentoInput struct {
 
 // agendamentoResponse formata Data como "2006-01-02" (o model guarda um
 // time.Time por causa do tipo `date` do Postgres, mas isso não deve vazar
-// como timestamp/timezone para o cliente).
+// como timestamp/timezone para o cliente). Os campos cliente_* continuam no
+// mesmo formato plano de antes (o frontend não precisa mudar nada) — só
+// passaram a vir de a.Cliente, não mais de colunas soltas no Agendamento.
 type agendamentoResponse struct {
 	ID                uint                     `json:"id"`
+	ClienteID         uint                     `json:"cliente_id"`
 	ClienteNome       string                   `json:"cliente_nome"`
 	ClienteTelefone   string                   `json:"cliente_telefone"`
 	ClienteEmail      string                   `json:"cliente_email"`
@@ -55,6 +58,7 @@ type agendamentoResponse struct {
 	Status            models.StatusAgendamento `json:"status"`
 	Observacoes       string                   `json:"observacoes"`
 	Encaixe           bool                     `json:"encaixe"`
+	Pago              bool                     `json:"pago"`
 	EstabelecimentoID uint                     `json:"estabelecimento_id"`
 	CreatedAt         time.Time                `json:"created_at"`
 	UpdatedAt         time.Time                `json:"updated_at"`
@@ -63,9 +67,10 @@ type agendamentoResponse struct {
 func toAgendamentoResponse(a models.Agendamento) agendamentoResponse {
 	return agendamentoResponse{
 		ID:                a.ID,
-		ClienteNome:       a.ClienteNome,
-		ClienteTelefone:   a.ClienteTelefone,
-		ClienteEmail:      a.ClienteEmail,
+		ClienteID:         a.ClienteID,
+		ClienteNome:       a.Cliente.Nome,
+		ClienteTelefone:   a.Cliente.Telefone,
+		ClienteEmail:      a.Cliente.Email,
 		ServicoID:         a.ServicoID,
 		Servico:           a.Servico,
 		ProfissionalID:    a.ProfissionalID,
@@ -75,10 +80,52 @@ func toAgendamentoResponse(a models.Agendamento) agendamentoResponse {
 		Status:            a.Status,
 		Observacoes:       a.Observacoes,
 		Encaixe:           a.Encaixe,
+		Pago:              a.Pago,
 		EstabelecimentoID: a.EstabelecimentoID,
 		CreatedAt:         a.CreatedAt,
 		UpdatedAt:         a.UpdatedAt,
 	}
+}
+
+// encontrarOuCriarCliente casa um cliente já existente pelo telefone dentro
+// do estabelecimento (ver models.Cliente) ou cria um novo — nunca há
+// cadastro manual, o cliente nasce do próprio agendamento. Nome e telefone
+// são sempre atualizados pro valor mais recente informado; e-mail só é
+// sobrescrito quando vem preenchido, pra não apagar um e-mail já salvo de
+// uma vez anterior.
+func encontrarOuCriarCliente(db *gorm.DB, estabelecimentoID uint, nome, telefone, email string) (*models.Cliente, error) {
+	telefoneNormalizado := apenasDigitos(telefone)
+
+	var cliente models.Cliente
+	err := db.Where(
+		"estabelecimento_id = ? AND regexp_replace(telefone, '[^0-9]', '', 'g') = ?",
+		estabelecimentoID, telefoneNormalizado,
+	).First(&cliente).Error
+	if err == gorm.ErrRecordNotFound {
+		cliente = models.Cliente{
+			Nome:              nome,
+			Telefone:          telefone,
+			Email:             email,
+			EstabelecimentoID: estabelecimentoID,
+		}
+		if err := db.Create(&cliente).Error; err != nil {
+			return nil, err
+		}
+		return &cliente, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	cliente.Nome = nome
+	cliente.Telefone = telefone
+	if email != "" {
+		cliente.Email = email
+	}
+	if err := db.Save(&cliente).Error; err != nil {
+		return nil, err
+	}
+	return &cliente, nil
 }
 
 func minutosDoDia(hora string) (int, error) {
@@ -165,7 +212,7 @@ func (h *AgendamentoHandler) haConflito(estabelecimentoID, profissionalID uint, 
 }
 
 func (h *AgendamentoHandler) List(c *gin.Context) {
-	query := h.DB.Preload("Servico").Preload("Profissional").
+	query := h.DB.Preload("Servico").Preload("Profissional").Preload("Cliente").
 		Where("estabelecimento_id = ?", auth.EstabelecimentoID(c))
 
 	// um auxiliar só vê a própria agenda, nunca a dos colegas; o dono vê
@@ -216,9 +263,10 @@ func (h *AgendamentoHandler) MeusAgendamentos(c *gin.Context) {
 	}
 
 	var agendamentos []models.Agendamento
-	err := h.DB.Preload("Servico").Preload("Profissional").
+	err := h.DB.Preload("Servico").Preload("Profissional").Preload("Cliente").
+		Joins("JOIN clientes ON clientes.id = agendamentos.cliente_id").
 		Where(
-			"estabelecimento_id = ? AND regexp_replace(cliente_telefone, '[^0-9]', '', 'g') = ?",
+			"agendamentos.estabelecimento_id = ? AND regexp_replace(clientes.telefone, '[^0-9]', '', 'g') = ?",
 			auth.EstabelecimentoID(c), telefone,
 		).
 		Order("data desc, hora desc").
@@ -295,10 +343,17 @@ func (h *AgendamentoHandler) criar(c *gin.Context, permitirAdmin bool) {
 		return
 	}
 
+	cliente, err := encontrarOuCriarCliente(
+		h.DB, estabelecimentoID,
+		strings.TrimSpace(input.ClienteNome), strings.TrimSpace(input.ClienteTelefone), strings.TrimSpace(input.ClienteEmail),
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao registrar cliente"})
+		return
+	}
+
 	agendamento := models.Agendamento{
-		ClienteNome:       strings.TrimSpace(input.ClienteNome),
-		ClienteTelefone:   strings.TrimSpace(input.ClienteTelefone),
-		ClienteEmail:      strings.TrimSpace(input.ClienteEmail),
+		ClienteID:         cliente.ID,
 		ServicoID:         input.ServicoID,
 		ProfissionalID:    profissionalID,
 		Data:              data,
@@ -312,6 +367,7 @@ func (h *AgendamentoHandler) criar(c *gin.Context, permitirAdmin bool) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao criar agendamento"})
 		return
 	}
+	agendamento.Cliente = *cliente
 	agendamento.Servico = servico
 	h.DB.First(&agendamento.Profissional, profissionalID)
 
@@ -345,7 +401,7 @@ func (h *AgendamentoHandler) buscarAgendamento(c *gin.Context) (*models.Agendame
 	}
 
 	var agendamento models.Agendamento
-	err = h.DB.Preload("Servico").Preload("Profissional").
+	err = h.DB.Preload("Servico").Preload("Profissional").Preload("Cliente").
 		Where("id = ? AND estabelecimento_id = ?", id, auth.EstabelecimentoID(c)).
 		First(&agendamento).Error
 	if err == gorm.ErrRecordNotFound {
@@ -407,6 +463,106 @@ func (h *AgendamentoHandler) Cancelar(c *gin.Context) {
 	h.cancelar(c, agendamento)
 }
 
+type atualizarPagoInput struct {
+	Pago bool `json:"pago"`
+}
+
+// AtualizarPago liga/desliga a marcação de pago no painel de detalhe — não
+// tem relação com o Status do agendamento. Mesma regra de dono/auxiliar do
+// resto do painel: auxiliar só mexe na própria agenda.
+func (h *AgendamentoHandler) AtualizarPago(c *gin.Context) {
+	agendamento, ok := h.buscarAgendamento(c)
+	if !ok {
+		return
+	}
+	if auth.Papel(c) == models.PapelAuxiliar && agendamento.ProfissionalID != auth.UsuarioID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "você só pode editar agendamentos da sua própria agenda"})
+		return
+	}
+
+	var input atualizarPagoInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.DB.Model(agendamento).Update("pago", input.Pago).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao atualizar pagamento"})
+		return
+	}
+	agendamento.Pago = input.Pago
+
+	c.JSON(http.StatusOK, toAgendamentoResponse(*agendamento))
+}
+
+type reagendarInput struct {
+	Data    string `json:"data" binding:"required"` // "2006-01-02"
+	Hora    string `json:"hora" binding:"required"` // "15:04"
+	Encaixe bool   `json:"encaixe"`
+}
+
+// Reagendar troca a data/hora de um agendamento existente — mantém cliente,
+// serviço e profissional, não cria um novo registro. Reaproveita a mesma
+// checagem de conflito/encaixe da criação (ignorarID exclui o próprio
+// registro da checagem, senão ele sempre "conflitaria" consigo mesmo).
+func (h *AgendamentoHandler) Reagendar(c *gin.Context) {
+	agendamento, ok := h.buscarAgendamento(c)
+	if !ok {
+		return
+	}
+	if auth.Papel(c) == models.PapelAuxiliar && agendamento.ProfissionalID != auth.UsuarioID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "você só pode reagendar agendamentos da sua própria agenda"})
+		return
+	}
+	if agendamento.Status == models.StatusCancelado {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "não é possível reagendar um agendamento cancelado"})
+		return
+	}
+
+	var input reagendarInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	data, err := time.Parse("2006-01-02", input.Data)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "data inválida"})
+		return
+	}
+	if _, err := time.Parse("15:04", input.Hora); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "hora inválida"})
+		return
+	}
+
+	conflito, err := h.haConflito(
+		agendamento.EstabelecimentoID, agendamento.ProfissionalID,
+		data, input.Hora, agendamento.Servico.DuracaoMin, agendamento.ID,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao verificar disponibilidade"})
+		return
+	}
+	encaixe := conflito && input.Encaixe
+	if conflito && !encaixe {
+		c.JSON(http.StatusConflict, gin.H{"error": "horário indisponível"})
+		return
+	}
+
+	err = h.DB.Model(agendamento).Updates(map[string]any{
+		"data": data, "hora": input.Hora, "encaixe": encaixe,
+	}).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao reagendar"})
+		return
+	}
+	agendamento.Data = data
+	agendamento.Hora = input.Hora
+	agendamento.Encaixe = encaixe
+
+	c.JSON(http.StatusOK, toAgendamentoResponse(*agendamento))
+}
+
 type cancelarPublicoInput struct {
 	Telefone string `json:"telefone" binding:"required"`
 }
@@ -426,7 +582,7 @@ func (h *AgendamentoHandler) CancelarPublico(c *gin.Context) {
 		return
 	}
 
-	if apenasDigitos(agendamento.ClienteTelefone) != apenasDigitos(input.Telefone) {
+	if apenasDigitos(agendamento.Cliente.Telefone) != apenasDigitos(input.Telefone) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "telefone não confere com o agendamento"})
 		return
 	}

@@ -18,6 +18,8 @@ interface AgendamentoDetailPanelProps {
   agendamento: Agendamento | null
   onOpenChange: (open: boolean) => void
   onCancelar: (id: number) => Promise<void>
+  onAtualizarPago: (id: number, pago: boolean) => Promise<void>
+  onReagendarClick: () => void
 }
 
 const STATUS_LABEL: Record<StatusAgendamento, string> = {
@@ -30,8 +32,11 @@ export function AgendamentoDetailPanel({
   agendamento,
   onOpenChange,
   onCancelar,
+  onAtualizarPago,
+  onReagendarClick,
 }: AgendamentoDetailPanelProps) {
   const [cancelando, setCancelando] = useState(false)
+  const [salvandoPago, setSalvandoPago] = useState(false)
 
   async function handleCancelar() {
     if (!agendamento) return
@@ -40,6 +45,16 @@ export function AgendamentoDetailPanel({
       await onCancelar(agendamento.id)
     } finally {
       setCancelando(false)
+    }
+  }
+
+  async function handleTogglePago(pago: boolean) {
+    if (!agendamento) return
+    setSalvandoPago(true)
+    try {
+      await onAtualizarPago(agendamento.id, pago)
+    } finally {
+      setSalvandoPago(false)
     }
   }
 
@@ -101,6 +116,21 @@ export function AgendamentoDetailPanel({
                   <dt className="text-muted-foreground">Status</dt>
                   <dd className="font-medium">{STATUS_LABEL[agendamento.status]}</dd>
                 </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-muted-foreground">Pago</dt>
+                  <dd>
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={agendamento.pago}
+                        disabled={salvandoPago}
+                        onChange={(e) => handleTogglePago(e.target.checked)}
+                        className="size-4 rounded border-input accent-primary"
+                      />
+                      <span className="font-medium">{agendamento.pago ? "Sim" : "Não"}</span>
+                    </label>
+                  </dd>
+                </div>
               </dl>
 
               {agendamento.observacoes && (
@@ -113,14 +143,19 @@ export function AgendamentoDetailPanel({
 
             <SheetFooter>
               {agendamento.status !== "cancelado" && (
-                <Button
-                  variant="outline"
-                  onClick={handleCancelar}
-                  disabled={cancelando}
-                  className="text-destructive hover:text-destructive"
-                >
-                  {cancelando ? "Cancelando..." : "Cancelar agendamento"}
-                </Button>
+                <>
+                  <Button variant="outline" onClick={onReagendarClick}>
+                    Reagendar
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleCancelar}
+                    disabled={cancelando}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    {cancelando ? "Cancelando..." : "Cancelar agendamento"}
+                  </Button>
+                </>
               )}
             </SheetFooter>
           </>
