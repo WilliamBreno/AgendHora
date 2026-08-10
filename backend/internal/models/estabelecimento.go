@@ -57,6 +57,25 @@ type Estabelecimento struct {
 	AvisoCorTexto string `json:"aviso_cor_texto"`
 	AvisoCorFundo string `json:"aviso_cor_fundo"`
 
+	// Plano é a string do plano contratado — hoje sempre "padrao" (só existe
+	// um plano, tudo incluso). Guardado desde já pra não exigir migration de
+	// dado quando outros planos forem definidos no futuro.
+	Plano string `gorm:"not null;default:padrao" json:"plano"`
+	// Ativo controla se o acesso está liberado enquanto a cobrança é manual
+	// (Pix) — ver internal/auth.ExigirEstabelecimentoAtivo e
+	// handlers.SlugMiddleware, que bloqueiam admin e página pública quando
+	// false. default:true de propósito: não pode bloquear retroativamente
+	// os estabelecimentos que já existem e já usam o sistema — só nasce
+	// false pra cadastros novos feitos pelo fluxo público (ver
+	// handlers.Cadastro), até o dono confirmar o pagamento.
+	Ativo bool `gorm:"not null;default:true" json:"ativo"`
+	// Isento marca quem nunca deve ser cobrado (uso pessoal do dono do
+	// projeto — ver models.EmailIsento) — separado de Ativo de propósito:
+	// Ativo sozinho não diz se é isento pra sempre ou um pagante em dia, e
+	// uma futura cobrança automática precisa dessa distinção pra não tentar
+	// cobrar quem deveria continuar de graça.
+	Isento bool `gorm:"not null;default:false" json:"isento"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

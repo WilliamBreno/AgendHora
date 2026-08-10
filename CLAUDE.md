@@ -32,14 +32,17 @@ Isso não é um recomeço: o modelo de dados abaixo já guardava `estabeleciment
 
 ## Modelo de negócio e preço
 
-- Plano único por enquanto: **R$19,90/mês**, tudo incluso — sem trava de funcionalidade por tier, sem comissão sobre o faturamento do estabelecimento (diferente do modelo do Drenux)
+- Plano único por enquanto: **R$19,90/mês**, tudo incluso (confirmado — toda a lista de funcionalidades do sistema entra nesse valor, sem trava por tier, sem comissão sobre o faturamento do estabelecimento)
+- Quando fizer sentido criar planos adicionais, a alavanca mais natural pra diferenciá-los é **quantidade de profissionais/auxiliares** (hoje sem limite) — não outras funcionalidades, já que nada da lista atual custa infraestrutura extra por cliente. Ainda não decidido quando/como; só fica registrado como o caminho mais óbvio pra quando chegar a hora
 - Posicionamento: bem abaixo dos concorrentes diretos do nicho (Trinks começa em R$65-89/mês, funcionalidade essencial só a partir de R$149-249/mês; Belezzia começa em R$199/mês) — o público-alvo é o profissional autônomo ou estabelecimento pequeno pra quem essas ferramentas são caras ou complexas demais
 - Cobrança: manual/Pix por enquanto (sem checkout automático nesta v1) — `Estabelecimento.ativo` (booleano) controla se o acesso está liberado, atualizado à mão até existir um fluxo de cobrança automática
+- **Decisão fechada sobre o bloqueio**: quando `ativo = false`, tudo fica indisponível — admin (login bloqueado, ou sessão existente expulsa) e página pública de agendamento (mostra uma mensagem simples de indisponível, não erro técnico). Isso ainda não foi implementado — é uma feature real a construir, não só o campo existir no banco
 - Planos futuros com mais funcionalidades estão previstos, mas não fazem parte do escopo agora — por isso o campo `Estabelecimento.plano` (string, hoje sempre `"padrao"`) já existe no modelo, pra não exigir migration de dado quando os outros planos forem definidos
 
 ## Modelo de dados
 
-- **Estabelecimento**: nome, `slug` (identifica a URL pública do estabelecimento), telefone, endereço (opcional), horário de funcionamento por dia da semana, `plano` (string, hoje sempre `"padrao"`), `ativo` (booleano, controla acesso enquanto a cobrança é manual), `icones_padrao` (lista configurável de nomes de ícones lucide-react disponíveis no cadastro de serviço — ver seção "Ícones dos serviços")
+- **Estabelecimento**: nome, `slug` (identifica a URL pública do estabelecimento), telefone, endereço (opcional), horário de funcionamento por dia da semana, `plano` (string, hoje sempre `"padrao"`), `ativo` (booleano, controla acesso enquanto a cobrança é manual), `isento` (booleano, separado de `ativo` — marca quem nunca deve ser cobrado, ver "Isenção de pagamento"), `icones_padrao`
+- **EmailIsento**: email (normalizado), estabelecimento_id (nulo até ser usado), criado_em — não pertence a nenhum estabelecimento, é uma lista global gerenciada só pelo dono do projeto (lista configurável de nomes de ícones lucide-react disponíveis no cadastro de serviço — ver seção "Ícones dos serviços")
 - **Usuario** (login): email, senha (hash), `papel` (`dono` | `auxiliar`), horário de trabalho, estabelecimento_id — auxiliares são convidados por e-mail e viram "profissionais" com login e agenda próprios (confirmado já implementado no código real; não criar uma tabela `Profissional` separada)
 - **Servico**: nome, preco, duracao_min, descricao, cor (chave de uma paleta fixa — ver abaixo), icone, estabelecimento_id
 - **Cliente**: nome, telefone (identifica o cliente dentro do estabelecimento), estabelecimento_id — criado/atualizado automaticamente a cada novo agendamento, sem precisar de cadastro manual separado
@@ -132,12 +135,36 @@ Existe um protótipo funcional em React (`agenda-estabelecimento.jsx`, entregue 
 
 - Cada agendamento ganha um campo `pago` (booleano) — marcável direto no painel de detalhe, ao lado do status
 - Dashboard passa a separar "recebido" de "a receber" dentro do faturamento do período, usando esse campo
-- Relatório básico: botão de exportar CSV dos agendamentos do período selecionado no dashboard (data, cliente, serviço, valor, pago ou não) — não é uma tela nova, é uma ação em cima dos dados que o dashboard já calcula
+- Relatório básico: exportar os agendamentos do período selecionado no dashboard (data, cliente, serviço, valor, pago ou não) em três formatos — **CSV**, **XLSX** (planilha formatada, via `excelize`) e **PDF** (resumo tabular com totais, pronto pra imprimir ou enviar; não reproduz os gráficos do dashboard, só a lista + totais, via alguma lib tipo `go-pdf/fpdf`) — não é uma tela nova, é uma ação em cima dos dados que o dashboard já calcula
 
 ## Lembretes automáticos
 
 - Envio de e-mail (Resend) algumas horas antes do horário marcado, lembrando o cliente do agendamento — **só e-mail por enquanto**, sem WhatsApp (ver decisão abaixo)
 - Precisa de uma tarefa agendada (cron) rodando diariamente/de hora em hora pra verificar quais agendamentos estão próximos e ainda não receberam lembrete — é a primeira peça de infraestrutura do projeto que não é só "responder a um pedido HTTP", vale planejar como um serviço/rotina separada do resto da API
+
+## Cadastro e ativação de novos estabelecimentos
+
+Peça que faltava por completo — tudo no resto do documento assume que o `Estabelecimento` já existe no banco; isso aqui é o caminho pra alguém novo chegar e virar cliente.
+
+Estrutura de URLs proposta: `/` (marketing pública), `/cadastro` (formulário), `/agendar/:slug` (página pública de cada estabelecimento, já descrita antes), `/admin` (login e painel).
+
+1. **Página de marketing** (`/`): explica o produto, mostra o preço (R$19,90/mês, tudo incluso) e tem um CTA de cadastro
+2. **Cadastro** (`/cadastro`): nome do estabelecimento (gera `slug` automaticamente, checando disponibilidade), e-mail, senha, telefone — cria `Usuario` (`papel = dono`) + `Estabelecimento` com `ativo = false` por padrão
+3. **Tela pós-cadastro**: instrução de pagamento (chave Pix, valor, contato pra avisar que pagou) — sem checkout automático nesta v1, mesmo padrão manual já usado pro campo `ativo`
+4. **Ativação**: feita manualmente no banco por enquanto (poucos clientes no início); uma tela interna pra listar estabelecimentos pendentes é upgrade natural mais pra frente, não é obrigatória agora
+5. Depois de ativo, login normal no `/admin`, sem nada especial
+
+**Em aberto, não decidido**: período de teste grátis antes de cobrar (ex: `ativo = true` por N dias a partir do cadastro) — é uma alavanca de conversão comum, mas fica de fora por enquanto; se decidido depois, é só trocar o valor padrão de `ativo` no cadastro, não exige redesenho.
+
+## Isenção de pagamento (uso pessoal do dono do projeto)
+
+Página separada, só pro dono do projeto (não pros donos de estabelecimento) — pra cadastrar e-mails que ficam isentos de pagar o plano.
+
+- **Login de plataforma**: conta única, separada de `Usuario`/`Estabelecimento` — sem fluxo de convite ou cadastro público, credencial guardada em variável de ambiente. Não deve ser alcançável a partir do login normal do admin de estabelecimento nenhum
+- **Nova entidade `EmailIsento`**: email (normalizado — minúsculo, sem espaço), estabelecimento_id (nulo até o e-mail ser de fato usado num cadastro), criado_em
+- Tela simples: listar e-mails isentos já cadastrados, adicionar novo, remover
+- **`Estabelecimento` ganha o campo `isento`** (booleano) — separado de `ativo`, porque `ativo` sozinho não diz se é isento pra sempre ou um pagante em dia; sem essa marca, uma futura cobrança automática tentaria cobrar quem deveria continuar de graça
+- **Cadastro atualizado**: ao criar a conta em `/cadastro`, checa se o e-mail informado está na lista de `EmailIsento` — se estiver, o `Estabelecimento` já nasce com `ativo = true` e `isento = true`, pulando a tela de instrução de pagamento inteira; se não estiver, segue o fluxo normal já descrito
 
 ## Ícones dos serviços
 
@@ -160,6 +187,9 @@ No protótipo visual que já existe, os ícones dos serviços de exemplo foram e
 8. Agenda semanal/diária, reagendamento, tela de Bloqueio de horários
 9. Tela de Clientes, campo `pago` + separação recebido/a receber no dashboard, exportação CSV
 10. Lembretes automáticos por e-mail (cron)
+11. Bloqueio de acesso por inadimplência: middleware/checagem de `Estabelecimento.ativo` em todas as rotas do admin (login e sessão) e na página pública, com mensagem amigável no lugar do sistema normal quando `ativo = false`
+12. Cadastro e ativação de novos estabelecimentos: página de marketing, formulário de cadastro (cria Usuario dono + Estabelecimento com `ativo = false`), tela pós-cadastro com instrução de pagamento
+13. Isenção de pagamento: login de plataforma separado, entidade EmailIsento, tela de gerenciar a lista, checagem no cadastro
 
 ## Decisões que não mudar sem repensar
 
@@ -173,3 +203,5 @@ No protótipo visual que já existe, os ícones dos serviços de exemplo foram e
 - Profissional é o próprio `Usuario` com `papel` auxiliar (login, agenda e horário próprios) — confirmado já implementado; não criar tabela `Profissional` separada
 - WhatsApp (confirmação e lembretes) fica de fora por decisão do dono do projeto — notificações são só por e-mail até segunda ordem
 - Integração com Google Agenda ficou fora desta rodada de melhorias — é a peça mais cara de construir (OAuth, API externa, tokens por estabelecimento) e a que menos diferencia o produto pro público-alvo (autônomos/pequenos negócios) comparado a ter a experiência principal rápida e bem feita; reavaliar quando o produto já tiver clientes pagantes validando o resto
+- Quando `Estabelecimento.ativo = false`, bloqueia tudo — admin e página pública — não só o admin
+- Login de plataforma (isenção de pagamento) é uma conta separada de `Usuario`/`Estabelecimento`, sem cadastro público — só pro dono do projeto

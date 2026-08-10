@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-pdf/fpdf"
+	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 
 	"agendamento/backend/internal/auth"
@@ -120,11 +122,12 @@ func (h *DashboardHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, resposta)
 }
 
-// CSV exporta os agendamentos confirmados de um dos períodos que os cards
-// do dashboard já calculam (hoje/semana/mês) — não é uma tela nova, é uma
-// ação em cima dos mesmos dados. Mesma regra de escopo do resto do
-// dashboard: auxiliar só exporta a própria agenda.
-func (h *DashboardHandler) CSV(c *gin.Context) {
+// agendamentosParaExportar resolve o período (hoje/semana/mês, mesmo
+// vocabulário dos cards do dashboard) e busca os agendamentos confirmados
+// dele — usado pelos três formatos de exportação (CSV, XLSX, PDF), que só
+// diferem em como escrevem esses mesmos dados. Mesma regra de escopo do
+// resto do dashboard: auxiliar só exporta a própria agenda.
+func (h *DashboardHandler) agendamentosParaExportar(c *gin.Context) ([]models.Agendamento, error) {
 	estabelecimentoID := auth.EstabelecimentoID(c)
 
 	agora := time.Now()
@@ -140,8 +143,7 @@ func (h *DashboardHandler) CSV(c *gin.Context) {
 		inicio = time.Date(hoje.Year(), hoje.Month(), 1, 0, 0, 0, 0, time.UTC)
 		fim = inicio.AddDate(0, 1, -1)
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "parâmetro 'periodo' inválido — use hoje, semana ou mes"})
-		return
+		return nil, fmt.Errorf("parâmetro 'periodo' inválido — use hoje, semana ou mes")
 	}
 
 	query := h.DB.Preload("Servico").Preload("Cliente").
@@ -154,8 +156,17 @@ func (h *DashboardHandler) CSV(c *gin.Context) {
 	}
 
 	var agendamentos []models.Agendamento
-	if err := query.Order("data asc, hora asc").Find(&agendamentos).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao gerar relatório"})
+	err := query.Order("data asc, hora asc").Find(&agendamentos).Error
+	return agendamentos, err
+}
+
+// CSV exporta os agendamentos confirmados de um dos períodos que os cards
+// do dashboard já calculam — não é uma tela nova, é uma ação em cima dos
+// mesmos dados.
+func (h *DashboardHandler) CSV(c *gin.Context) {
+	agendamentos, err := h.agendamentosParaExportar(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -168,19 +179,203 @@ func (h *DashboardHandler) CSV(c *gin.Context) {
 	writer.Comma = ';'
 	writer.Write([]string{"Data", "Cliente", "Serviço", "Valor", "Pago"})
 	for _, a := range agendamentos {
-		pago := "Não"
-		if a.Pago {
-			pago = "Sim"
-		}
 		writer.Write([]string{
 			a.Data.Format("02/01/2006"),
 			a.Cliente.Nome,
 			a.Servico.Nome,
 			formatarReais(a.Servico.Preco),
-			pago,
+			simOuNao(a.Pago),
 		})
 	}
 	writer.Flush()
+}
+
+// XLSX gera a mesma exportação em planilha formatada (cabeçalho em negrito,
+// larguras de coluna ajustadas, valores como número com formato monetário
+// de verdade — não como texto "R$ x,xx" — pra dar pra somar/filtrar direto
+// no Excel/Sheets).
+func (h *DashboardHandler) XLSX(c *gin.Context) {
+	agendamentos, err := h.agendamentosParaExportar(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	f := excelize.NewFile()
+	defer f.Close()
+	const aba = "Agendamentos"
+	f.SetSheetName("Sheet1", aba)
+
+	cabecalho := []string{"Data", "Cliente", "Serviço", "Valor", "Pago"}
+	estiloCabecalho, _ := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{Bold: true, Color: "FFFFFF"},
+		Fill: excelize.Fill{Type: "pattern", Color: []string{"0C7C71"}, Pattern: 1},
+	})
+	estiloMoeda, _ := f.NewStyle(&excelize.Style{CustomNumFmt: strPtr(`"R$" #,##0.00`)})
+
+	for i, titulo := range cabecalho {
+		celula, _ := excelize.CoordinatesToCellName(i+1, 1)
+		f.SetCellValue(aba, celula, titulo)
+	}
+	f.SetCellStyle(aba, "A1", "E1", estiloCabecalho)
+
+	var totalFaturamento float64
+	linha := 2
+	for _, a := range agendamentos {
+		f.SetCellValue(aba, fmt.Sprintf("A%d", linha), a.Data.Format("02/01/2006"))
+		f.SetCellValue(aba, fmt.Sprintf("B%d", linha), a.Cliente.Nome)
+		f.SetCellValue(aba, fmt.Sprintf("C%d", linha), a.Servico.Nome)
+		f.SetCellValue(aba, fmt.Sprintf("D%d", linha), a.Servico.Preco)
+		f.SetCellStyle(aba, fmt.Sprintf("D%d", linha), fmt.Sprintf("D%d", linha), estiloMoeda)
+		f.SetCellValue(aba, fmt.Sprintf("E%d", linha), simOuNao(a.Pago))
+		totalFaturamento += a.Servico.Preco
+		linha++
+	}
+
+	if len(agendamentos) > 0 {
+		estiloTotalLabel, _ := f.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true}})
+		estiloTotalValor, _ := f.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true}, CustomNumFmt: strPtr(`"R$" #,##0.00`)})
+		f.SetCellValue(aba, fmt.Sprintf("C%d", linha), "Total")
+		f.SetCellStyle(aba, fmt.Sprintf("C%d", linha), fmt.Sprintf("C%d", linha), estiloTotalLabel)
+		f.SetCellValue(aba, fmt.Sprintf("D%d", linha), totalFaturamento)
+		f.SetCellStyle(aba, fmt.Sprintf("D%d", linha), fmt.Sprintf("D%d", linha), estiloTotalValor)
+	}
+
+	f.SetColWidth(aba, "A", "A", 14)
+	f.SetColWidth(aba, "B", "B", 26)
+	f.SetColWidth(aba, "C", "C", 22)
+	f.SetColWidth(aba, "D", "D", 14)
+	f.SetColWidth(aba, "E", "E", 8)
+
+	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Header("Content-Disposition", `attachment; filename="agendamentos.xlsx"`)
+	if err := f.Write(c.Writer); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao gerar planilha"})
+	}
+}
+
+// PDF gera um resumo tabular pra imprimir ou enviar — só a lista de
+// agendamentos do período e os totais (recebido/a receber/geral), sem
+// reproduzir os gráficos do dashboard (ver CLAUDE.md).
+func (h *DashboardHandler) PDF(c *gin.Context) {
+	agendamentos, err := h.agendamentosParaExportar(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var estabelecimento models.Estabelecimento
+	h.DB.First(&estabelecimento, auth.EstabelecimentoID(c))
+
+	pdf := fpdf.New("P", "mm", "A4", "")
+	pdf.SetMargins(15, 15, 15)
+	pdf.AddPage()
+
+	pdf.SetFont("Helvetica", "B", 16)
+	pdf.CellFormat(0, 8, transliterar(estabelecimento.Nome), "", 1, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "", 11)
+	pdf.SetTextColor(100, 100, 100)
+	pdf.CellFormat(0, 6, transliterar("Relatório de agendamentos - "+rotuloPeriodo(c.Query("periodo"))), "", 1, "L", false, 0, "")
+	pdf.SetTextColor(0, 0, 0)
+	pdf.Ln(4)
+
+	// cabeçalho da tabela
+	larguras := []float64{28, 55, 55, 27, 15}
+	titulos := []string{"Data", "Cliente", "Servico", "Valor", "Pago"}
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.SetFillColor(12, 124, 113)
+	pdf.SetTextColor(255, 255, 255)
+	for i, titulo := range titulos {
+		pdf.CellFormat(larguras[i], 8, titulo, "1", 0, "L", true, 0, "")
+	}
+	pdf.Ln(-1)
+
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetTextColor(0, 0, 0)
+	var totalGeral, totalRecebido, totalAReceber float64
+	linhaCor := false
+	for _, a := range agendamentos {
+		if linhaCor {
+			pdf.SetFillColor(245, 245, 244)
+		} else {
+			pdf.SetFillColor(255, 255, 255)
+		}
+		linhaCor = !linhaCor
+		pdf.CellFormat(larguras[0], 7, a.Data.Format("02/01/2006"), "1", 0, "L", true, 0, "")
+		pdf.CellFormat(larguras[1], 7, transliterar(a.Cliente.Nome), "1", 0, "L", true, 0, "")
+		pdf.CellFormat(larguras[2], 7, transliterar(a.Servico.Nome), "1", 0, "L", true, 0, "")
+		pdf.CellFormat(larguras[3], 7, transliterar(formatarReais(a.Servico.Preco)), "1", 0, "R", true, 0, "")
+		pdf.CellFormat(larguras[4], 7, simOuNao(a.Pago), "1", 0, "C", true, 0, "")
+		pdf.Ln(-1)
+
+		totalGeral += a.Servico.Preco
+		if a.Pago {
+			totalRecebido += a.Servico.Preco
+		} else {
+			totalAReceber += a.Servico.Preco
+		}
+	}
+
+	pdf.Ln(6)
+	pdf.SetFont("Helvetica", "B", 11)
+	pdf.CellFormat(0, 7, transliterar(fmt.Sprintf("Total: %s  (%d agendamentos)", formatarReais(totalGeral), len(agendamentos))), "", 1, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetTextColor(90, 147, 103)
+	pdf.CellFormat(0, 6, transliterar("Recebido: "+formatarReais(totalRecebido)), "", 1, "L", false, 0, "")
+	pdf.SetTextColor(214, 154, 52)
+	pdf.CellFormat(0, 6, transliterar("A receber: "+formatarReais(totalAReceber)), "", 1, "L", false, 0, "")
+	pdf.SetTextColor(0, 0, 0)
+
+	c.Header("Content-Type", "application/pdf")
+	c.Header("Content-Disposition", `attachment; filename="agendamentos.pdf"`)
+	if err := pdf.Output(c.Writer); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao gerar PDF"})
+	}
+}
+
+func simOuNao(v bool) string {
+	if v {
+		return "Sim"
+	}
+	return "Não"
+}
+
+func rotuloPeriodo(periodo string) string {
+	switch periodo {
+	case "hoje":
+		return "Hoje"
+	case "semana":
+		return "Essa semana"
+	case "mes":
+		return "Esse mes"
+	default:
+		return periodo
+	}
+}
+
+func strPtr(s string) *string { return &s }
+
+// transliterar troca acentos/cê-cedilha por equivalentes ASCII — a fonte
+// Helvetica padrão do fpdf não cobre Latin-1 supplement direito (usa a
+// codificação core de 14 fontes do PDF), então texto acentuado sairia
+// corrompido sem isso. Custo aceitável: só a exportação em PDF perde os
+// acentos, CSV e XLSX continuam com o texto original.
+func transliterar(s string) string {
+	substituicoes := strings.NewReplacer(
+		"á", "a", "à", "a", "ã", "a", "â", "a", "ä", "a",
+		"é", "e", "ê", "e", "è", "e", "ë", "e",
+		"í", "i", "ì", "i", "î", "i", "ï", "i",
+		"ó", "o", "ò", "o", "õ", "o", "ô", "o", "ö", "o",
+		"ú", "u", "ù", "u", "û", "u", "ü", "u",
+		"ç", "c", "ñ", "n",
+		"Á", "A", "À", "A", "Ã", "A", "Â", "A", "Ä", "A",
+		"É", "E", "Ê", "E", "È", "E", "Ë", "E",
+		"Í", "I", "Ì", "I", "Î", "I", "Ï", "I",
+		"Ó", "O", "Ò", "O", "Õ", "O", "Ô", "O", "Ö", "O",
+		"Ú", "U", "Ù", "U", "Û", "U", "Ü", "U",
+		"Ç", "C", "Ñ", "N",
+	)
+	return substituicoes.Replace(s)
 }
 
 func inicioSemana(dia time.Time) time.Time {

@@ -38,6 +38,7 @@ func Migrate(db *gorm.DB) {
 		&models.Agendamento{},
 		&models.ConviteProfissional{},
 		&models.Bloqueio{},
+		&models.EmailIsento{},
 	)
 	if err != nil {
 		log.Fatalf("erro ao rodar migrations: %v", err)

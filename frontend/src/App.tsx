@@ -12,8 +12,13 @@ import { EquipePage } from "@/pages/admin/EquipePage"
 import { BloqueiosPage } from "@/pages/admin/BloqueiosPage"
 import { RotaSomenteDono } from "@/components/layout/RotaSomenteDono"
 import { LoginPage } from "@/pages/auth/LoginPage"
-import { RegistroPage } from "@/pages/auth/RegistroPage"
+import { CadastroPage } from "@/pages/auth/CadastroPage"
+import { PagamentoPendentePage } from "@/pages/auth/PagamentoPendentePage"
 import { ConvitePage } from "@/pages/auth/ConvitePage"
+import { ContaInativaPage } from "@/pages/auth/ContaInativaPage"
+import { MarketingPage } from "@/pages/marketing/MarketingPage"
+import { PlataformaLoginPage } from "@/pages/plataforma/PlataformaLoginPage"
+import { PlataformaIsencoesPage } from "@/pages/plataforma/PlataformaIsencoesPage"
 import { AgendarPage } from "@/pages/public/AgendarPage"
 import { MeusAgendamentosPage } from "@/pages/public/MeusAgendamentosPage"
 
@@ -24,8 +29,16 @@ function App() {
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/registro" element={<RegistroPage />} />
+            <Route path="/cadastro" element={<CadastroPage />} />
+            <Route path="/cadastro/pagamento" element={<PagamentoPendentePage />} />
+            {/* /registro é o link antigo — mantido redirecionando pra não quebrar quem já tinha salvo */}
+            <Route path="/registro" element={<Navigate to="/cadastro" replace />} />
             <Route path="/convite/:token" element={<ConvitePage />} />
+            <Route path="/conta-inativa" element={<ContaInativaPage />} />
+
+            {/* uso pessoal do dono do projeto — sem link em lugar nenhum da UI normal */}
+            <Route path="/plataforma/login" element={<PlataformaLoginPage />} />
+            <Route path="/plataforma/isencoes" element={<PlataformaIsencoesPage />} />
 
             <Route element={<RotaProtegida />}>
               <Route path="/admin" element={<AdminLayout />}>
@@ -45,7 +58,7 @@ function App() {
             <Route path="/:slug/meus-agendamentos" element={<MeusAgendamentosPage />} />
             <Route path="/:slug" element={<AgendarPage />} />
 
-            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/" element={<MarketingPage />} />
           </Routes>
         </AuthProvider>
       </ThemeProvider>

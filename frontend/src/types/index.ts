@@ -166,6 +166,14 @@ export interface Estabelecimento {
   aviso_texto: string
   aviso_cor_texto: string
   aviso_cor_fundo: string
+  // plano é sempre "padrao" hoje (plano único) — guardado desde já pra não
+  // exigir migration quando outros planos forem definidos.
+  plano: string
+  // ativo controla o acesso enquanto a cobrança é manual (Pix) — ver
+  // CLAUDE.md "Cadastro e ativação de novos estabelecimentos" e o middleware
+  // ExigirEstabelecimentoAtivo no backend, que bloqueia admin e página
+  // pública quando false.
+  ativo: boolean
   created_at: string
   updated_at: string
 }
@@ -215,6 +223,18 @@ export interface Sugestao {
   tipo: "alerta" | "incentivo"
   titulo: string
   descricao: string
+}
+
+// EmailIsento é a lista global de e-mails isentos de pagamento (uso pessoal
+// do dono do projeto, gerenciada em /plataforma — ver CLAUDE.md "Isenção de
+// pagamento"). estabelecimento_id fica nulo até o e-mail ser usado num
+// cadastro.
+export interface EmailIsento {
+  id: number
+  email: string
+  estabelecimento_id: number | null
+  estabelecimento_nome: string
+  created_at: string
 }
 
 export interface Dashboard {

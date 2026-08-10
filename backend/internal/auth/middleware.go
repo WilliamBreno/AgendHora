@@ -5,9 +5,16 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"agendamento/backend/internal/models"
 )
+
+// MensagemContaInativa é o texto amigável mostrado quando o estabelecimento
+// está com o acesso bloqueado por inadimplência — nunca um erro técnico.
+// Compartilhado entre o bloqueio de login e o de sessão já aberta (ver
+// ExigirEstabelecimentoAtivo) pra manter a mesma redação nos dois casos.
+const MensagemContaInativa = "Sua conta está temporariamente indisponível. Entre em contato pra regularizar o pagamento e voltar a usar o sistema."
 
 const (
 	ctxUsuarioID = "usuario_id"
@@ -31,7 +38,7 @@ func Middleware(gerenciador *Gerenciador) gin.HandlerFunc {
 		}
 
 		claims, err := gerenciador.ValidarToken(strings.TrimPrefix(cabecalho, "Bearer "))
-		if err != nil {
+		if err != nil || claims.Escopo == escopoPlataforma {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "sessão inválida ou expirada"})
 			return
 		}
@@ -39,6 +46,49 @@ func Middleware(gerenciador *Gerenciador) gin.HandlerFunc {
 		c.Set(ctxUsuarioID, claims.UsuarioID)
 		c.Set(CtxEstabelecimentoID, claims.EstabelecimentoID)
 		c.Set(ctxPapel, claims.Papel)
+		c.Next()
+	}
+}
+
+// MiddlewarePlataforma exige um token de plataforma válido — completamente
+// isolado do Middleware normal (token diferente, sem usuario_id nem
+// estabelecimento_id no contexto). Usado só nas rotas de gerenciar a lista
+// de EmailIsento (ver "Isenção de pagamento" no CLAUDE.md).
+func MiddlewarePlataforma(gerenciador *Gerenciador) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cabecalho := c.GetHeader("Authorization")
+		if cabecalho == "" || !strings.HasPrefix(cabecalho, "Bearer ") {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "não autenticado"})
+			return
+		}
+		if _, err := gerenciador.ValidarTokenPlataforma(strings.TrimPrefix(cabecalho, "Bearer ")); err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "sessão inválida ou expirada"})
+			return
+		}
+		c.Next()
+	}
+}
+
+// ExigirEstabelecimentoAtivo expulsa sessões de estabelecimentos com
+// `ativo = false` — não basta bloquear o login: um JWT emitido antes da
+// inadimplência continua válido normalmente (é stateless), então essa
+// checagem roda a cada request admin, depois de Middleware, pra garantir
+// que uma sessão já aberta perde o acesso assim que o campo muda no banco.
+// Devolve 402 (não 401/403) de propósito — é um status só dela, que o
+// frontend usa pra distinguir "sem permissão" de "conta inativa" e mostrar
+// a mensagem certa em vez de simplesmente deslogar em silêncio.
+func ExigirEstabelecimentoAtivo(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var estabelecimento models.Estabelecimento
+		err := db.Select("id", "ativo").First(&estabelecimento, EstabelecimentoID(c)).Error
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "erro ao verificar estabelecimento"})
+			return
+		}
+		if !estabelecimento.Ativo {
+			c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{"error": MensagemContaInativa})
+			return
+		}
 		c.Next()
 	}
 }

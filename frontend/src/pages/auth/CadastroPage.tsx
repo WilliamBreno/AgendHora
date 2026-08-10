@@ -8,12 +8,13 @@ import { ThemeToggle } from "@/components/common/ThemeToggle"
 import { useAuth } from "@/contexts/AuthContext"
 import { ApiError } from "@/lib/api"
 
-export function RegistroPage() {
-  const { registro } = useAuth()
+export function CadastroPage() {
+  const { registro, logout } = useAuth()
   const navigate = useNavigate()
   const [nomeEstabelecimento, setNomeEstabelecimento] = useState("")
   const [nome, setNome] = useState("")
   const [email, setEmail] = useState("")
+  const [telefone, setTelefone] = useState("")
   const [senha, setSenha] = useState("")
   const [erro, setErro] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
@@ -29,9 +30,18 @@ export function RegistroPage() {
 
     setEnviando(true)
     try {
-      await registro(nomeEstabelecimento, nome, email, senha)
-      toast.success("Conta criada! Sua página de agendamento já está pronta.")
-      navigate("/admin/comecando")
+      const resposta = await registro(nomeEstabelecimento, nome, email, senha, telefone)
+      if (resposta.estabelecimento.ativo) {
+        toast.success("Conta criada! Sua página de agendamento já está pronta.")
+        navigate("/admin/comecando")
+      } else {
+        // ativo=false: a conta existe mas ainda não deve funcionar como uma
+        // sessão de verdade — sem isso, o token guardado dispara o
+        // redirecionamento de sessão expulsa (ExigirEstabelecimentoAtivo)
+        // na próxima página que o dono visitar, até em cima do /login.
+        logout()
+        navigate("/cadastro/pagamento")
+      }
     } catch (err) {
       setErro(err instanceof ApiError ? err.message : "Erro ao criar conta")
     } finally {
@@ -73,6 +83,16 @@ export function RegistroPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="telefone">Telefone</Label>
+            <Input
+              id="telefone"
+              type="tel"
+              value={telefone}
+              onChange={(e) => setTelefone(e.target.value)}
               required
             />
           </div>

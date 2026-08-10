@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { HoraInput } from "@/components/common/HoraInput"
 import { ApiError } from "@/lib/api"
 import type { DiaSemana, HorarioDia, HorarioFuncionamento } from "@/types"
 
@@ -99,20 +99,18 @@ export function HorarioFuncionamentoEditor({
                 />
                 Fechado
               </label>
-              <Input
-                type="time"
+              <HoraInput
                 value={horario.abre}
                 disabled={horario.fechado}
-                onChange={(e) => atualizarDia(dia, "abre", e.target.value)}
-                className="w-28"
+                onChange={(valor) => atualizarDia(dia, "abre", valor)}
+                className="w-24"
               />
               <span className="text-sm text-muted-foreground">até</span>
-              <Input
-                type="time"
+              <HoraInput
                 value={horario.fecha}
                 disabled={horario.fechado}
-                onChange={(e) => atualizarDia(dia, "fecha", e.target.value)}
-                className="w-28"
+                onChange={(valor) => atualizarDia(dia, "fecha", valor)}
+                className="w-24"
               />
             </div>
             {!horario.fechado && (
@@ -128,18 +126,16 @@ export function HorarioFuncionamentoEditor({
                 </label>
                 {temIntervalo && (
                   <>
-                    <Input
-                      type="time"
+                    <HoraInput
                       value={horario.intervalo_inicio}
-                      onChange={(e) => atualizarDia(dia, "intervalo_inicio", e.target.value)}
-                      className="w-28"
+                      onChange={(valor) => atualizarDia(dia, "intervalo_inicio", valor)}
+                      className="w-24"
                     />
                     <span className="text-xs text-muted-foreground">até</span>
-                    <Input
-                      type="time"
+                    <HoraInput
                       value={horario.intervalo_fim}
-                      onChange={(e) => atualizarDia(dia, "intervalo_fim", e.target.value)}
-                      className="w-28"
+                      onChange={(valor) => atualizarDia(dia, "intervalo_fim", valor)}
+                      className="w-24"
                     />
                   </>
                 )}

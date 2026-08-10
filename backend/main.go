@@ -22,7 +22,7 @@ func main() {
 	notificador := notifications.New(cfg.BrevoAPIKey, cfg.EmailRemetenteNome, cfg.EmailRemetente)
 	lembretes.Iniciar(db, notificador)
 
-	router := api.NewRouter(db, cfg.JWTSecret, notificador, cfg.AllowedOrigins, cfg.FrontendURL)
+	router := api.NewRouter(db, cfg.JWTSecret, notificador, cfg.AllowedOrigins, cfg.FrontendURL, cfg.PlataformaSenha)
 
 	log.Printf("servidor rodando na porta %s", cfg.Port)
 	if err := router.Run(":" + cfg.Port); err != nil {

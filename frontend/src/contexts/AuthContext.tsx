@@ -15,7 +15,13 @@ interface AuthContextValue {
   autenticado: boolean
   ehDono: boolean
   login: (email: string, senha: string) => Promise<void>
-  registro: (nomeEstabelecimento: string, nome: string, email: string, senha: string) => Promise<void>
+  registro: (
+    nomeEstabelecimento: string,
+    nome: string,
+    email: string,
+    senha: string,
+    telefone: string
+  ) => Promise<SessaoResponse>
   entrarComSessao: (sessao: SessaoResponse) => void
   logout: () => void
   atualizarEstabelecimento: (estabelecimento: Estabelecimento) => void
@@ -55,14 +61,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     entrarComSessao(resposta)
   }
 
-  async function registro(nomeEstabelecimento: string, nome: string, email: string, senha: string) {
+  async function registro(
+    nomeEstabelecimento: string,
+    nome: string,
+    email: string,
+    senha: string,
+    telefone: string
+  ) {
     const resposta = await api.post<SessaoResponse>("/api/auth/registro", {
       nome_estabelecimento: nomeEstabelecimento,
       nome,
       email,
       senha,
+      telefone,
     })
     entrarComSessao(resposta)
+    return resposta
   }
 
   function logout() {

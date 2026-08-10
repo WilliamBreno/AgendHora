@@ -34,11 +34,20 @@ type registroInput struct {
 	Nome                string `json:"nome" binding:"required"`
 	Email               string `json:"email" binding:"required,email"`
 	Senha               string `json:"senha" binding:"required,min=6"`
+	Telefone            string `json:"telefone" binding:"required"`
 }
 
 // Registro cria uma empresa nova (com slug e configurações padrão) e o
 // primeiro usuário dela. Cada empresa na plataforma nasce por aqui — não
 // existe mais um estabelecimento único criado automaticamente no boot.
+//
+// Todo cadastro nasce com Ativo=false (cobrança manual via Pix — ver
+// CLAUDE.md "Cadastro e ativação de novos estabelecimentos"): o frontend
+// manda o dono pra tela de instrução de pagamento em vez do onboarding
+// normal, e ExigirEstabelecimentoAtivo bloqueia qualquer rota admin até a
+// ativação manual no banco. Exceção: e-mail cadastrado em EmailIsento (ver
+// "Isenção de pagamento") nasce direto com Ativo=true e Isento=true,
+// pulando a tela de pagamento inteira.
 func (h *AuthHandler) Registro(c *gin.Context) {
 	var input registroInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -70,23 +79,44 @@ func (h *AuthHandler) Registro(c *gin.Context) {
 	icones, _ := json.Marshal(models.IconesPadraoDefault)
 	horario, _ := json.Marshal(models.HorarioFuncionamentoDefault())
 
+	var emailIsento models.EmailIsento
+	isento := h.DB.Where("email = ?", email).First(&emailIsento).Error == nil
+
 	estabelecimento := models.Estabelecimento{
 		Nome:                 strings.TrimSpace(input.NomeEstabelecimento),
 		Slug:                 slugGerado,
 		Email:                email,
 		IconesPadrao:         datatypes.JSON(icones),
 		HorarioFuncionamento: datatypes.JSON(horario),
+		// Isento=true e Ativo=true aqui são valores não-zero, então GORM
+		// sempre inclui os dois no INSERT — sem a pegadinha do zero-value
+		// omitido que existe pro caso contrário (ver comentário abaixo).
+		Isento: isento,
+		Ativo:  isento,
 	}
 
 	usuario := models.Usuario{
 		Nome:              strings.TrimSpace(input.Nome),
 		Email:             email,
+		Telefone:          strings.TrimSpace(input.Telefone),
 		SenhaHash:         senhaHash,
 		Papel:             models.PapelDono,
 		EstabelecimentoID: estabelecimento.ID,
 	}
 	err = h.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&estabelecimento).Error; err != nil {
+			return err
+		}
+		if !isento {
+			// GORM omite campos bool no INSERT quando valem o zero-value
+			// (false) e têm `default` no tag — Estabelecimento.Ativo tem
+			// default:true, então a linha nasceria ativa mesmo com
+			// Ativo:false no struct acima. Update explícito garante o
+			// valor certo independente disso.
+			if err := tx.Model(&estabelecimento).Update("ativo", false).Error; err != nil {
+				return err
+			}
+		} else if err := tx.Model(&emailIsento).Update("estabelecimento_id", estabelecimento.ID).Error; err != nil {
 			return err
 		}
 		usuario.EstabelecimentoID = estabelecimento.ID
@@ -130,6 +160,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	var estabelecimento models.Estabelecimento
 	if err := h.DB.First(&estabelecimento, usuario.EstabelecimentoID).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao buscar estabelecimento"})
+		return
+	}
+	if !estabelecimento.Ativo {
+		c.JSON(http.StatusPaymentRequired, gin.H{"error": auth.MensagemContaInativa})
 		return
 	}
 

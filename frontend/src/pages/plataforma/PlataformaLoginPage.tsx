@@ -1,16 +1,13 @@
 import { useState, type FormEvent } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ThemeToggle } from "@/components/common/ThemeToggle"
-import { useAuth } from "@/contexts/AuthContext"
-import { ApiError } from "@/lib/api"
+import { apiPlataforma, setTokenPlataforma, ApiError } from "@/lib/api"
 
-export function LoginPage() {
-  const { login } = useAuth()
+export function PlataformaLoginPage() {
   const navigate = useNavigate()
-  const [email, setEmail] = useState("")
   const [senha, setSenha] = useState("")
   const [erro, setErro] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
@@ -20,8 +17,9 @@ export function LoginPage() {
     setErro(null)
     setEnviando(true)
     try {
-      await login(email, senha)
-      navigate("/admin/agenda")
+      const resposta = await apiPlataforma.post<{ token: string }>("/login", { senha })
+      setTokenPlataforma(resposta.token)
+      navigate("/plataforma/isencoes")
     } catch (err) {
       setErro(err instanceof ApiError ? err.message : "Erro ao entrar")
     } finally {
@@ -35,24 +33,14 @@ export function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
           <img src="/logo.png" alt="AgendHora" className="size-12 rounded-xl" />
-          <h1 className="font-heading text-2xl font-semibold">AgendHora</h1>
-          <p className="text-sm text-muted-foreground">Entre na sua conta</p>
+          <h1 className="font-heading text-xl font-semibold">Plataforma</h1>
+          <p className="text-sm text-muted-foreground">Acesso interno — só o dono do projeto</p>
         </div>
 
         <form
           onSubmit={handleSubmit}
           className="flex flex-col gap-4 rounded-xl border border-border bg-card p-6"
         >
-          <div className="grid gap-1.5">
-            <Label htmlFor="email">E-mail</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
           <div className="grid gap-1.5">
             <Label htmlFor="senha">Senha</Label>
             <Input
@@ -61,6 +49,7 @@ export function LoginPage() {
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
               required
+              autoFocus
             />
           </div>
 
@@ -70,13 +59,6 @@ export function LoginPage() {
             {enviando ? "Entrando..." : "Entrar"}
           </Button>
         </form>
-
-        <p className="mt-4 text-center text-sm text-muted-foreground">
-          Ainda não tem conta?{" "}
-          <Link to="/cadastro" className="text-primary hover:underline">
-            Cadastre seu estabelecimento
-          </Link>
-        </p>
       </div>
     </div>
   )

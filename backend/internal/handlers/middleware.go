@@ -27,6 +27,10 @@ func SlugMiddleware(db *gorm.DB) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "erro ao buscar empresa"})
 			return
 		}
+		if !estabelecimento.Ativo {
+			c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{"error": "Este estabelecimento está temporariamente indisponível para agendamentos."})
+			return
+		}
 		c.Set(auth.CtxEstabelecimentoID, estabelecimento.ID)
 		c.Set("estabelecimento", estabelecimento)
 		c.Next()

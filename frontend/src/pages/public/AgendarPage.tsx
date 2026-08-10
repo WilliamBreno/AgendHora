@@ -23,7 +23,7 @@ const ETAPAS_COM_VOLTAR: Etapa[] = ["profissional", "horario", "dados"]
 
 export function AgendarPage() {
   const { slug = "" } = useParams()
-  const { estabelecimento, loading: carregandoEstabelecimento, naoEncontrado } =
+  const { estabelecimento, loading: carregandoEstabelecimento, naoEncontrado, indisponivel } =
     usePublicoEstabelecimento(slug)
   const { servicos, loading: carregandoServicos } = usePublicoServicos(slug)
   const { profissionais, loading: carregandoProfissionais } = usePublicoProfissionais(slug)
@@ -120,6 +120,20 @@ export function AgendarPage() {
           <h1 className="font-heading text-xl font-semibold">Página não encontrada</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Confira o link com o estabelecimento e tente de novo.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (indisponivel) {
+    return (
+      <div className="flex min-h-svh items-center justify-center p-4 text-center">
+        <div>
+          <h1 className="font-heading text-xl font-semibold">Agendamento indisponível</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Esse estabelecimento está temporariamente indisponível pra novos agendamentos. Tente
+            novamente mais tarde.
           </p>
         </div>
       </div>

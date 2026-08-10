@@ -17,6 +17,11 @@ type Config struct {
 	AllowedOrigins     []string
 	JWTSecret          string
 	FrontendURL        string
+	// PlataformaSenha é a credencial única do login de plataforma (uso
+	// pessoal do dono do projeto — ver "Isenção de pagamento" no
+	// CLAUDE.md). Vazia desliga o recurso — não tem cadastro público nem
+	// fluxo de recuperação, só essa variável de ambiente.
+	PlataformaSenha string
 }
 
 // Load lê o .env (se existir) e as variáveis de ambiente do processo.
@@ -61,6 +66,11 @@ func Load() Config {
 		frontendURL = "http://localhost:5173"
 	}
 
+	plataformaSenha := os.Getenv("PLATFORM_ADMIN_SENHA")
+	if plataformaSenha == "" {
+		log.Println("aviso: PLATFORM_ADMIN_SENHA não definida — login de plataforma desligado")
+	}
+
 	return Config{
 		DatabaseURL:        dbURL,
 		Port:               port,
@@ -70,5 +80,6 @@ func Load() Config {
 		AllowedOrigins:     origensExtras,
 		JWTSecret:          jwtSecret,
 		FrontendURL:        frontendURL,
+		PlataformaSenha:    plataformaSenha,
 	}
 }

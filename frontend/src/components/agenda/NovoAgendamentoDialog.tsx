@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { DatePickerPopover } from "@/components/public/DatePickerPopover"
+import { HoraInput } from "@/components/common/HoraInput"
 import {
   Select,
   SelectContent,
@@ -211,23 +213,20 @@ export function NovoAgendamentoDialog({
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
-                <Label htmlFor="data">Data</Label>
-                <Input
-                  id="data"
-                  type="date"
+                <Label>Data</Label>
+                <DatePickerPopover
                   value={form.data}
-                  onChange={(e) => atualizarCampo("data", e.target.value)}
+                  onChange={(valor) => atualizarCampo("data", valor)}
                 />
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="hora">Horário</Label>
-                <Input
+                <HoraInput
                   id="hora"
-                  type="time"
                   value={form.hora}
-                  onChange={(e) => atualizarCampo("hora", e.target.value)}
+                  onChange={(valor) => atualizarCampo("hora", valor)}
                 />
               </div>
             </div>

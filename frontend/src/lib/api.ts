@@ -65,10 +65,14 @@ async function requestAdmin<T>(path: string, init?: RequestInit): Promise<T> {
       },
     })
   } catch (err) {
-    if (err instanceof ApiError && err.status === 401) {
+    if (err instanceof ApiError && (err.status === 401 || err.status === 402)) {
       clearToken()
-      if (!window.location.pathname.startsWith("/login")) {
-        window.location.href = "/login"
+      // 401: sessão inválida/expirada, volta pro login. 402: conta
+      // desativada por inadimplência (ver auth.ExigirEstabelecimentoAtivo
+      // no backend) — expulsa pra uma tela própria, não o login normal.
+      const destino = err.status === 402 ? "/conta-inativa" : "/login"
+      if (!window.location.pathname.startsWith(destino)) {
+        window.location.href = destino
       }
     }
     throw err
@@ -115,6 +119,53 @@ export async function baixarArquivoAdmin(path: string, nomeArquivo: string) {
   link.click()
   link.remove()
   URL.revokeObjectURL(url)
+}
+
+const TOKEN_PLATAFORMA_KEY = "agendhora_plataforma_token"
+
+export function getTokenPlataforma() {
+  return localStorage.getItem(TOKEN_PLATAFORMA_KEY)
+}
+
+export function setTokenPlataforma(token: string) {
+  localStorage.setItem(TOKEN_PLATAFORMA_KEY, token)
+}
+
+export function clearTokenPlataforma() {
+  localStorage.removeItem(TOKEN_PLATAFORMA_KEY)
+}
+
+// apiPlataforma: uso pessoal do dono do projeto (ver CLAUDE.md "Isenção de
+// pagamento") — guarda o token num localStorage próprio, à parte do
+// `agendhora_token` do admin de estabelecimento, pra não ter nenhuma
+// chance de um se passar pelo outro no frontend (o backend já garante isso
+// à parte, mas mantém os dois isolados dos dois lados).
+async function requestPlataforma<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getTokenPlataforma()
+  try {
+    return await request<T>(`/api/plataforma${path}`, {
+      ...init,
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init?.headers,
+      },
+    })
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) {
+      clearTokenPlataforma()
+      if (!window.location.pathname.startsWith("/plataforma/login")) {
+        window.location.href = "/plataforma/login"
+      }
+    }
+    throw err
+  }
+}
+
+export const apiPlataforma = {
+  post: <T>(path: string, data: unknown) =>
+    requestPlataforma<T>(path, { method: "POST", body: JSON.stringify(data) }),
+  get: <T>(path: string) => requestPlataforma<T>(path),
+  delete: <T>(path: string) => requestPlataforma<T>(path, { method: "DELETE" }),
 }
 
 // apiPublico: página de agendamento do cliente — nunca precisa de login,

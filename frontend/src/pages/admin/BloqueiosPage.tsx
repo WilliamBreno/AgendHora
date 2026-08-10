@@ -11,6 +11,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { DatePickerPopover } from "@/components/public/DatePickerPopover"
+import { HoraInput } from "@/components/common/HoraInput"
 import { useBloqueios } from "@/hooks/useBloqueios"
 import { useEquipe } from "@/hooks/useEquipe"
 import { formatarDataExibicao } from "@/lib/formatacao"
@@ -93,12 +95,10 @@ export function BloqueiosPage() {
         <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
-              <Label htmlFor="data">Data</Label>
-              <Input
-                id="data"
-                type="date"
+              <Label>Data</Label>
+              <DatePickerPopover
                 value={form.data}
-                onChange={(e) => setForm((f) => ({ ...f, data: e.target.value }))}
+                onChange={(valor) => setForm((f) => ({ ...f, data: valor }))}
               />
             </div>
 
@@ -143,23 +143,21 @@ export function BloqueiosPage() {
           </label>
 
           {!diaInteiro && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="hora_inicio">Início</Label>
-                <Input
+                <HoraInput
                   id="hora_inicio"
-                  type="time"
                   value={form.hora_inicio}
-                  onChange={(e) => setForm((f) => ({ ...f, hora_inicio: e.target.value }))}
+                  onChange={(valor) => setForm((f) => ({ ...f, hora_inicio: valor }))}
                 />
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="hora_fim">Fim</Label>
-                <Input
+                <HoraInput
                   id="hora_fim"
-                  type="time"
                   value={form.hora_fim}
-                  onChange={(e) => setForm((f) => ({ ...f, hora_fim: e.target.value }))}
+                  onChange={(valor) => setForm((f) => ({ ...f, hora_fim: valor }))}
                 />
               </div>
             </div>

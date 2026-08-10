@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { Download } from "lucide-react"
+import { ChevronDown, Download, FileSpreadsheet, FileText } from "lucide-react"
 import gsap from "gsap"
 import { toast } from "sonner"
 import { useDashboard } from "@/hooks/useDashboard"
@@ -15,14 +15,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { baixarArquivoAdmin, ApiError } from "@/lib/api"
 
 type Periodo = "hoje" | "semana" | "mes"
+type FormatoExportacao = "csv" | "xlsx" | "pdf"
 
 const PERIODO_LABEL: Record<Periodo, string> = {
   hoje: "Hoje",
   semana: "Essa semana",
   mes: "Esse mês",
+}
+
+const FORMATO_CONFIG: Record<FormatoExportacao, { label: string; icone: typeof Download }> = {
+  csv: { label: "CSV", icone: Download },
+  xlsx: { label: "Planilha (XLSX)", icone: FileSpreadsheet },
+  pdf: { label: "PDF", icone: FileText },
 }
 
 export function DashboardPage() {
@@ -31,12 +44,15 @@ export function DashboardPage() {
   const [periodoExportar, setPeriodoExportar] = useState<Periodo>("mes")
   const [exportando, setExportando] = useState(false)
 
-  async function handleExportarCSV() {
+  async function handleExportar(formato: FormatoExportacao) {
     setExportando(true)
     try {
-      await baixarArquivoAdmin(`/dashboard/csv?periodo=${periodoExportar}`, `agendamentos-${periodoExportar}.csv`)
+      await baixarArquivoAdmin(
+        `/dashboard/${formato}?periodo=${periodoExportar}`,
+        `agendamentos-${periodoExportar}.${formato}`
+      )
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Erro ao exportar CSV")
+      toast.error(err instanceof ApiError ? err.message : "Erro ao exportar relatório")
     } finally {
       setExportando(false)
     }
@@ -75,10 +91,27 @@ export function DashboardPage() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={handleExportarCSV} disabled={exportando}>
-            <Download className="size-4" />
-            {exportando ? "Exportando..." : "Exportar CSV"}
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button variant="outline" size="sm" disabled={exportando}>
+                  <Download className="size-4" />
+                  {exportando ? "Exportando..." : "Exportar"}
+                  <ChevronDown className="size-4" />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end">
+              {(Object.keys(FORMATO_CONFIG) as FormatoExportacao[]).map((formato) => {
+                const { label, icone: Icone } = FORMATO_CONFIG[formato]
+                return (
+                  <DropdownMenuItem key={formato} onClick={() => handleExportar(formato)}>
+                    <Icone className="size-4" /> {label}
+                  </DropdownMenuItem>
+                )
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

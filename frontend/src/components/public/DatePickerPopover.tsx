@@ -10,14 +10,12 @@ interface DatePickerPopoverProps {
   onChange: (data: string) => void
 }
 
+// dd/mm/yyyy direto das partes do ISO (sem Date/locale) — formato mais
+// compacto, ocupa menos espaço no botão em telas estreitas do que o "seg.,
+// 09 de ago." por extenso de antes.
 function formatarExibicao(dataISO: string) {
-  const [ano, mes, dia] = dataISO.split("-").map(Number)
-  const texto = new Date(ano, mes - 1, dia).toLocaleDateString("pt-BR", {
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-  })
-  return texto.charAt(0).toUpperCase() + texto.slice(1)
+  const [ano, mes, dia] = dataISO.split("-")
+  return `${dia}/${mes}/${ano}`
 }
 
 export function DatePickerPopover({ value, onChange }: DatePickerPopoverProps) {

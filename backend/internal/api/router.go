@@ -37,7 +37,7 @@ func permitirOrigem(origensExtras []string) func(origin string) bool {
 // exigem JWT (o dono logado) e resolvem a empresa a partir do token; rotas
 // /publico/:slug não exigem login e resolvem a empresa pela URL — é o link
 // que cada dono compartilha com os próprios clientes.
-func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notificador, origensExtras []string, frontendURL string) *gin.Engine {
+func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notificador, origensExtras []string, frontendURL string, plataformaSenha string) *gin.Engine {
 	router := gin.Default()
 
 	router.Use(cors.New(cors.Config{
@@ -63,6 +63,7 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 	profissionalHandler := handlers.NewProfissionalHandler(db, gerenciador, notificador, frontendURL)
 	usuarioHandler := handlers.NewUsuarioHandler(db)
 	bloqueioHandler := handlers.NewBloqueioHandler(db)
+	plataformaHandler := handlers.NewPlataformaHandler(db, gerenciador, plataformaSenha)
 
 	apiGroup := router.Group("/api")
 	{
@@ -82,6 +83,7 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 
 		admin := apiGroup.Group("/admin")
 		admin.Use(authpkg.Middleware(gerenciador))
+		admin.Use(authpkg.ExigirEstabelecimentoAtivo(db))
 		{
 			admin.GET("/sessao", authHandler.Sessao)
 
@@ -128,6 +130,8 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 
 			admin.GET("/dashboard", dashboardHandler.Get)
 			admin.GET("/dashboard/csv", dashboardHandler.CSV)
+			admin.GET("/dashboard/xlsx", dashboardHandler.XLSX)
+			admin.GET("/dashboard/pdf", dashboardHandler.PDF)
 		}
 
 		publico := apiGroup.Group("/publico/:slug")
@@ -141,6 +145,23 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 			publico.POST("/agendamentos", agendamentoHandler.CreatePublico)
 			publico.GET("/meus-agendamentos", agendamentoHandler.MeusAgendamentos)
 			publico.PATCH("/agendamentos/:id/cancelar", agendamentoHandler.CancelarPublico)
+		}
+
+		// /plataforma é de uso pessoal do dono do projeto (ver CLAUDE.md
+		// "Isenção de pagamento") — login próprio, credencial única via
+		// variável de ambiente, sem relação nenhuma com o login de
+		// Usuario/Estabelecimento (nem token nem rota são compartilhados).
+		plataforma := apiGroup.Group("/plataforma")
+		{
+			plataforma.POST("/login", plataformaHandler.Login)
+
+			protegido := plataforma.Group("")
+			protegido.Use(authpkg.MiddlewarePlataforma(gerenciador))
+			{
+				protegido.GET("/emails-isentos", plataformaHandler.ListarEmailsIsentos)
+				protegido.POST("/emails-isentos", plataformaHandler.AdicionarEmailIsento)
+				protegido.DELETE("/emails-isentos/:id", plataformaHandler.RemoverEmailIsento)
+			}
 		}
 	}
 
