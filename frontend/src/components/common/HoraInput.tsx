@@ -2,7 +2,9 @@ import { Input } from "@/components/ui/input"
 
 interface HoraInputProps {
   id?: string
-  value: string // "HH:MM" ou ""
+  // opcional porque HorarioDia.intervalo_inicio/intervalo_fim (ver types/index.ts)
+  // são campos opcionais — o intervalo de descanso não existe até o dono ativá-lo.
+  value: string | undefined // "HH:MM" ou ""/undefined
   onChange: (valor: string) => void
   disabled?: boolean
   className?: string
@@ -30,7 +32,7 @@ export function HoraInput({ id, value, onChange, disabled, className }: HoraInpu
       inputMode="numeric"
       placeholder="HH:MM"
       maxLength={5}
-      value={value}
+      value={value ?? ""}
       disabled={disabled}
       onChange={handleChange}
       className={className}
