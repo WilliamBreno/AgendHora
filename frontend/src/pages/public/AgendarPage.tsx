@@ -21,6 +21,16 @@ type Etapa = "servico" | "profissional" | "horario" | "dados" | "confirmacao"
 
 const ETAPAS_COM_VOLTAR: Etapa[] = ["profissional", "horario", "dados"]
 
+// título de cada passo do fluxo — a etapa "confirmacao" não entra aqui
+// porque ConfirmacaoAgendamento já tem o próprio título ("Agendamento
+// confirmado!"), não precisa de um de cima duplicando.
+const TITULO_ETAPA: Partial<Record<Etapa, string>> = {
+  servico: "Escolha o serviço",
+  profissional: "Escolha o profissional",
+  horario: "Escolha a data e o horário",
+  dados: "Seus dados",
+}
+
 export function AgendarPage() {
   const { slug = "" } = useParams()
   const { estabelecimento, loading: carregandoEstabelecimento, naoEncontrado, indisponivel } =
@@ -178,6 +188,10 @@ export function AgendarPage() {
       )}
 
       <div ref={conteudoRef}>
+        {TITULO_ETAPA[etapa] && (
+          <h2 className="mb-3 font-heading text-lg font-semibold">{TITULO_ETAPA[etapa]}</h2>
+        )}
+
         {etapa === "servico" &&
           (carregandoServicos || carregandoProfissionais ? (
             <p className="text-center text-sm text-muted-foreground">Carregando serviços...</p>

@@ -92,6 +92,12 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
+  /* pulso do contorno do AvisoFaixa (ver components/public/AvisoFaixa) —
+     anel que expande e desvanece ao redor da faixa inteira, não só do
+     ícone. Cor vem de --pulso-cor, setada inline pelo componente pra casar
+     com a cor customizada do aviso (ou a cor primária, se não customizado). */
+  --animate-pulso-contorno: pulso-contorno 2.2s ease-in-out infinite;
 }
 
 @layer base {
@@ -108,5 +114,15 @@
   h5,
   h6 {
     @apply font-heading;
+  }
+}
+
+@keyframes pulso-contorno {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--pulso-cor, var(--color-primary)) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in oklch, var(--pulso-cor, var(--color-primary)) 0%, transparent);
   }
 }
