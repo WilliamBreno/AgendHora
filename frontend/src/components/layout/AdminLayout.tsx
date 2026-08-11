@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
 import {
   Ban,
   CalendarRange,
+  Contact,
   ExternalLink,
   LayoutDashboard,
   LogOut,
@@ -22,6 +23,7 @@ import { useOnboardingStatus } from "@/hooks/useOnboardingStatus"
 const NAV_ITEMS_BASE = [
   { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/admin/agenda", label: "Agenda", icon: CalendarRange },
+  { to: "/admin/clientes", label: "Clientes", icon: Contact },
   { to: "/admin/servicos", label: "Serviços", icon: Sparkles },
 ]
 

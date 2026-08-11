@@ -121,6 +121,27 @@ export async function baixarArquivoAdmin(path: string, nomeArquivo: string) {
   URL.revokeObjectURL(url)
 }
 
+// enviarArquivoAdmin é pra rotas que recebem upload (ex: importação de
+// clientes) — precisa de multipart/form-data, então não passa pelo
+// `request` acima (que sempre manda Content-Type: application/json).
+export async function enviarArquivoAdmin<T>(path: string, campo: string, arquivo: File): Promise<T> {
+  const token = getToken()
+  const formData = new FormData()
+  formData.append(campo, arquivo)
+
+  const response = await fetch(`${API_URL}/api/admin${path}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  })
+
+  const body = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new ApiError(body?.error ?? `Erro ${response.status} ao enviar arquivo`, response.status)
+  }
+  return body as T
+}
+
 const TOKEN_PLATAFORMA_KEY = "agendhora_plataforma_token"
 
 export function getTokenPlataforma() {

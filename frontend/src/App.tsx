@@ -6,6 +6,7 @@ import { RotaProtegida } from "@/components/layout/RotaProtegida"
 import { DashboardPage } from "@/pages/admin/DashboardPage"
 import { ComecandoPage } from "@/pages/admin/ComecandoPage"
 import { AgendaPage } from "@/pages/admin/AgendaPage"
+import { ClientesPage } from "@/pages/admin/ClientesPage"
 import { ServicosPage } from "@/pages/admin/ServicosPage"
 import { ConfiguracoesPage } from "@/pages/admin/ConfiguracoesPage"
 import { EquipePage } from "@/pages/admin/EquipePage"
@@ -46,6 +47,7 @@ function App() {
                 <Route path="comecando" element={<ComecandoPage />} />
                 <Route path="dashboard" element={<DashboardPage />} />
                 <Route path="agenda" element={<AgendaPage />} />
+                <Route path="clientes" element={<ClientesPage />} />
                 <Route path="servicos" element={<ServicosPage />} />
                 <Route element={<RotaSomenteDono />}>
                   <Route path="configuracoes" element={<ConfiguracoesPage />} />

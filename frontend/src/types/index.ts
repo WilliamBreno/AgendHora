@@ -245,6 +245,30 @@ export interface EmailIsento {
   created_at: string
 }
 
+export interface Cliente {
+  id: number
+  nome: string
+  telefone: string
+  email: string
+  // "YYYY-MM-DD" ou null — nem todo cliente tem (nasce sem, a partir de um
+  // agendamento; só existe se cadastrado/editado manualmente ou importado).
+  data_nascimento: string | null
+  agendamentos_count: number
+  created_at: string
+}
+
+export interface ClienteInput {
+  nome: string
+  telefone: string
+  data_nascimento: string | null
+}
+
+export interface ImportacaoClientesResultado {
+  criados: number
+  atualizados: number
+  total: number
+}
+
 export interface Dashboard {
   hoje: PeriodoMetricas
   semana: PeriodoMetricas

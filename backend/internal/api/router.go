@@ -63,6 +63,7 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 	profissionalHandler := handlers.NewProfissionalHandler(db, gerenciador, notificador, frontendURL)
 	usuarioHandler := handlers.NewUsuarioHandler(db)
 	bloqueioHandler := handlers.NewBloqueioHandler(db)
+	clienteHandler := handlers.NewClienteHandler(db)
 	plataformaHandler := handlers.NewPlataformaHandler(db, gerenciador, plataformaSenha)
 
 	apiGroup := router.Group("/api")
@@ -132,6 +133,13 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 			admin.GET("/dashboard/csv", dashboardHandler.CSV)
 			admin.GET("/dashboard/xlsx", dashboardHandler.XLSX)
 			admin.GET("/dashboard/pdf", dashboardHandler.PDF)
+
+			// clientes já atendidos (criados automaticamente a cada
+			// agendamento) + cadastro manual e importação em lote.
+			admin.GET("/clientes", clienteHandler.List)
+			admin.POST("/clientes", clienteHandler.Create)
+			admin.PUT("/clientes/:id", clienteHandler.Update)
+			admin.POST("/clientes/importar", clienteHandler.Importar)
 		}
 
 		publico := apiGroup.Group("/publico/:slug")
