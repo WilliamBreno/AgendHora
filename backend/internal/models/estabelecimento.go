@@ -75,7 +75,29 @@ type Estabelecimento struct {
 	// uma futura cobrança automática precisa dessa distinção pra não tentar
 	// cobrar quem deveria continuar de graça.
 	Isento bool `gorm:"not null;default:false" json:"isento"`
+	// IsentoAte é até quando a isenção vale — nil quando Isento=false, ou
+	// quando a isenção é "sempre" (EmailIsento.DuracaoDias nil no cadastro).
+	// Com data, Bloqueado() passa a negar acesso automaticamente depois
+	// dela, sem precisar de nenhuma rotina/cron: é só mais uma condição
+	// checada nos mesmos três pontos que já bloqueiam por Ativo=false
+	// (login, sessão aberta, página pública).
+	IsentoAte *time.Time `json:"isento_ate"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// Bloqueado decide se o acesso deve ser negado — ativo=false (inadimplência,
+// ver handlers.Registro/ExigirEstabelecimentoAtivo) ou isenção temporária já
+// vencida (ver EmailIsento.DuracaoDias). Único ponto de verdade: usado no
+// login, na checagem de sessão já aberta e na página pública, pra garantir
+// que os três se comportam igual.
+func (e Estabelecimento) Bloqueado() bool {
+	if !e.Ativo {
+		return true
+	}
+	if e.Isento && e.IsentoAte != nil && time.Now().After(*e.IsentoAte) {
+		return true
+	}
+	return false
 }

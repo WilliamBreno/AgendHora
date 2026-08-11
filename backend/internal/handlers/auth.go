@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/datatypes"
@@ -82,6 +83,16 @@ func (h *AuthHandler) Registro(c *gin.Context) {
 	var emailIsento models.EmailIsento
 	isento := h.DB.Where("email = ?", email).First(&emailIsento).Error == nil
 
+	// DuracaoDias nil = isenção "sempre" (IsentoAte fica nil, sem vencimento).
+	// Com duração, o acesso liberado agora já nasce com prazo pra vencer —
+	// Estabelecimento.Bloqueado() passa a negar depois dessa data sozinho,
+	// sem precisar de nenhuma rotina helper.
+	var isentoAte *time.Time
+	if isento && emailIsento.DuracaoDias != nil {
+		vencimento := time.Now().AddDate(0, 0, *emailIsento.DuracaoDias)
+		isentoAte = &vencimento
+	}
+
 	estabelecimento := models.Estabelecimento{
 		Nome:                 strings.TrimSpace(input.NomeEstabelecimento),
 		Slug:                 slugGerado,
@@ -91,8 +102,9 @@ func (h *AuthHandler) Registro(c *gin.Context) {
 		// Isento=true e Ativo=true aqui são valores não-zero, então GORM
 		// sempre inclui os dois no INSERT — sem a pegadinha do zero-value
 		// omitido que existe pro caso contrário (ver comentário abaixo).
-		Isento: isento,
-		Ativo:  isento,
+		Isento:    isento,
+		Ativo:     isento,
+		IsentoAte: isentoAte,
 	}
 
 	usuario := models.Usuario{
@@ -162,7 +174,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao buscar estabelecimento"})
 		return
 	}
-	if !estabelecimento.Ativo {
+	if estabelecimento.Bloqueado() {
 		c.JSON(http.StatusPaymentRequired, gin.H{"error": auth.MensagemContaInativa})
 		return
 	}

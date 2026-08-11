@@ -80,12 +80,12 @@ func MiddlewarePlataforma(gerenciador *Gerenciador) gin.HandlerFunc {
 func ExigirEstabelecimentoAtivo(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var estabelecimento models.Estabelecimento
-		err := db.Select("id", "ativo").First(&estabelecimento, EstabelecimentoID(c)).Error
+		err := db.Select("id", "ativo", "isento", "isento_ate").First(&estabelecimento, EstabelecimentoID(c)).Error
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "erro ao verificar estabelecimento"})
 			return
 		}
-		if !estabelecimento.Ativo {
+		if estabelecimento.Bloqueado() {
 			c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{"error": MensagemContaInativa})
 			return
 		}

@@ -229,11 +229,19 @@ export interface Sugestao {
 // do dono do projeto, gerenciada em /plataforma — ver CLAUDE.md "Isenção de
 // pagamento"). estabelecimento_id fica nulo até o e-mail ser usado num
 // cadastro.
+// DuracaoIsencao é por quantos dias o acesso fica liberado a partir do
+// cadastro — null significa "sempre" (isenção permanente).
+export type DuracaoIsencao = 7 | 15 | 30 | null
+
 export interface EmailIsento {
   id: number
   email: string
+  duracao_dias: DuracaoIsencao
   estabelecimento_id: number | null
   estabelecimento_nome: string
+  // isento_ate só vem preenchido depois que o e-mail foi usado num
+  // cadastro — null enquanto não foi usado, ou se a isenção é "sempre".
+  isento_ate: string | null
   created_at: string
 }
 

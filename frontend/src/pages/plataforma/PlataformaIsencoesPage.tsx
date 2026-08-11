@@ -5,14 +5,34 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { ThemeToggle } from "@/components/common/ThemeToggle"
 import { useEmailsIsentos } from "@/hooks/useEmailsIsentos"
 import { getTokenPlataforma, clearTokenPlataforma, ApiError } from "@/lib/api"
+import type { DuracaoIsencao } from "@/types"
+
+const DURACAO_LABEL: Record<string, string> = {
+  sempre: "Sempre",
+  "7": "7 dias",
+  "15": "15 dias",
+  "30": "30 dias",
+}
+
+function formatarData(iso: string) {
+  return new Date(iso).toLocaleDateString("pt-BR")
+}
 
 export function PlataformaIsencoesPage() {
   const navigate = useNavigate()
   const { emails, loading, adicionar, remover } = useEmailsIsentos()
   const [email, setEmail] = useState("")
+  const [duracao, setDuracao] = useState("sempre")
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [removendoId, setRemovendoId] = useState<number | null>(null)
@@ -26,8 +46,10 @@ export function PlataformaIsencoesPage() {
     setErro(null)
     setSalvando(true)
     try {
-      await adicionar(email)
+      const duracaoDias = (duracao === "sempre" ? null : Number(duracao)) as DuracaoIsencao
+      await adicionar(email, duracaoDias)
       setEmail("")
+      setDuracao("sempre")
       toast.success("E-mail adicionado à lista de isenção.")
     } catch (err) {
       setErro(err instanceof ApiError ? err.message : "Erro ao adicionar e-mail")
@@ -84,6 +106,23 @@ export function PlataformaIsencoesPage() {
             required
           />
         </div>
+        <div className="grid gap-1.5">
+          <Label>Duração</Label>
+          <Select value={duracao} onValueChange={(v) => setDuracao(v ?? "sempre")}>
+            <SelectTrigger className="w-32">
+              <SelectValue placeholder="Sempre">
+                {(v: string | null) => DURACAO_LABEL[v ?? "sempre"]}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(DURACAO_LABEL).map(([valor, label]) => (
+                <SelectItem key={valor} value={valor}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <Button type="submit" disabled={salvando}>
           {salvando ? "Adicionando..." : "Adicionar"}
         </Button>
@@ -104,9 +143,21 @@ export function PlataformaIsencoesPage() {
               <div className="flex-1">
                 <p className="font-medium">{e.email}</p>
                 <p className="text-sm text-muted-foreground">
-                  {e.estabelecimento_id
-                    ? `Usado por ${e.estabelecimento_nome}`
-                    : "Ainda não usado"}
+                  {e.estabelecimento_id ? `Usado por ${e.estabelecimento_nome}` : "Ainda não usado"}
+                  {" · "}
+                  {!e.duracao_dias ? (
+                    "Sempre"
+                  ) : e.isento_ate ? (
+                    new Date(e.isento_ate) < new Date() ? (
+                      <span className="text-destructive">
+                        Isenção expirada em {formatarData(e.isento_ate)}
+                      </span>
+                    ) : (
+                      `Isento até ${formatarData(e.isento_ate)}`
+                    )
+                  ) : (
+                    `${e.duracao_dias} dias (a partir do cadastro)`
+                  )}
                 </p>
               </div>
               <Button

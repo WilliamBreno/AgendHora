@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { apiPlataforma, ApiError } from "@/lib/api"
-import type { EmailIsento } from "@/types"
+import type { DuracaoIsencao, EmailIsento } from "@/types"
 
 export function useEmailsIsentos() {
   const [emails, setEmails] = useState<EmailIsento[]>([])
@@ -23,8 +23,11 @@ export function useEmailsIsentos() {
     carregar()
   }, [carregar])
 
-  async function adicionar(email: string) {
-    const criado = await apiPlataforma.post<EmailIsento>("/emails-isentos", { email })
+  async function adicionar(email: string, duracaoDias: DuracaoIsencao) {
+    const criado = await apiPlataforma.post<EmailIsento>("/emails-isentos", {
+      email,
+      duracao_dias: duracaoDias,
+    })
     setEmails((atual) => [criado, ...atual])
     return criado
   }

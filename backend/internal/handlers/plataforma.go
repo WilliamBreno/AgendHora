@@ -61,23 +61,29 @@ func (h *PlataformaHandler) Login(c *gin.Context) {
 }
 
 type emailIsentoResponse struct {
-	ID                  uint      `json:"id"`
-	Email               string    `json:"email"`
-	EstabelecimentoID   *uint     `json:"estabelecimento_id"`
-	EstabelecimentoNome string    `json:"estabelecimento_nome"`
-	CreatedAt           time.Time `json:"created_at"`
+	ID                  uint       `json:"id"`
+	Email               string     `json:"email"`
+	DuracaoDias         *int       `json:"duracao_dias"`
+	EstabelecimentoID   *uint      `json:"estabelecimento_id"`
+	EstabelecimentoNome string     `json:"estabelecimento_nome"`
+	IsentoAte           *time.Time `json:"isento_ate"`
+	CreatedAt           time.Time  `json:"created_at"`
 }
 
 func toEmailIsentoResponse(e models.EmailIsento) emailIsentoResponse {
 	nome := ""
+	var isentoAte *time.Time
 	if e.EstabelecimentoID != nil {
 		nome = e.Estabelecimento.Nome
+		isentoAte = e.Estabelecimento.IsentoAte
 	}
 	return emailIsentoResponse{
 		ID:                  e.ID,
 		Email:               e.Email,
+		DuracaoDias:         e.DuracaoDias,
 		EstabelecimentoID:   e.EstabelecimentoID,
 		EstabelecimentoNome: nome,
+		IsentoAte:           isentoAte,
 		CreatedAt:           e.CreatedAt,
 	}
 }
@@ -98,6 +104,18 @@ func (h *PlataformaHandler) ListarEmailsIsentos(c *gin.Context) {
 
 type emailIsentoInput struct {
 	Email string `json:"email" binding:"required,email"`
+	// DuracaoDias nil = isenção "sempre". Com valor, só aceita as opções da
+	// tela (7/15/30) — ver models.DuracoesIsencaoValidas.
+	DuracaoDias *int `json:"duracao_dias"`
+}
+
+func duracaoValida(dias int) bool {
+	for _, d := range models.DuracoesIsencaoValidas {
+		if d == dias {
+			return true
+		}
+	}
+	return false
 }
 
 // AdicionarEmailIsento cadastra um e-mail novo na lista — normalizado
@@ -107,6 +125,10 @@ func (h *PlataformaHandler) AdicionarEmailIsento(c *gin.Context) {
 	var input emailIsentoInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if input.DuracaoDias != nil && !duracaoValida(*input.DuracaoDias) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "duração inválida — use 7, 15, 30 ou deixe em branco pra sempre"})
 		return
 	}
 
@@ -119,7 +141,7 @@ func (h *PlataformaHandler) AdicionarEmailIsento(c *gin.Context) {
 		return
 	}
 
-	emailIsento := models.EmailIsento{Email: email}
+	emailIsento := models.EmailIsento{Email: email, DuracaoDias: input.DuracaoDias}
 	if err := h.DB.Create(&emailIsento).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao adicionar e-mail isento"})
 		return
