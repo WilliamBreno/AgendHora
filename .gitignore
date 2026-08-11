@@ -1,0 +1,7 @@
+# skills instaladas via "npx skills add" (ver https://officialskills.sh) — o
+# código baixado de cada skill fica só na máquina de quem instalou, nunca
+# versionado (mesma lógica do node_modules). skills-lock.json continua
+# rastreado — é o "package-lock" delas: documenta o que deveria estar
+# instalado, cada máquina restaura via "npx skills experimental_install".
+.agents/
+.claude/skills/
