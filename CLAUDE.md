@@ -45,7 +45,7 @@ Isso não é um recomeço: o modelo de dados abaixo já guardava `estabeleciment
 - **EmailIsento**: email (normalizado), estabelecimento_id (nulo até ser usado), criado_em — não pertence a nenhum estabelecimento, é uma lista global gerenciada só pelo dono do projeto (lista configurável de nomes de ícones lucide-react disponíveis no cadastro de serviço — ver seção "Ícones dos serviços")
 - **Usuario** (login): email, senha (hash), `papel` (`dono` | `auxiliar`), horário de trabalho, estabelecimento_id — auxiliares são convidados por e-mail e viram "profissionais" com login e agenda próprios (confirmado já implementado no código real; não criar uma tabela `Profissional` separada)
 - **Servico**: nome, preco, duracao_min, descricao, cor (chave de uma paleta fixa — ver abaixo), icone, estabelecimento_id
-- **Cliente**: nome, telefone (identifica o cliente dentro do estabelecimento), estabelecimento_id — criado/atualizado automaticamente a cada novo agendamento, sem precisar de cadastro manual separado
+- **Cliente**: nome, telefone (identifica o cliente dentro do estabelecimento), `data_nascimento` (opcional), estabelecimento_id — criado/atualizado automaticamente a cada novo agendamento, sem precisar de cadastro manual separado
 - **Agendamento**: cliente_id, servico_id, profissional_id (referencia `Usuario`, não uma tabela `Profissional` separada), data, hora, status (`pendente` | `confirmado` | `cancelado`), pago (booleano), observacoes, estabelecimento_id
 - **Bloqueio**: data, hora_inicio, hora_fim (nulo = dia inteiro), motivo (opcional), profissional_id (nulo = bloqueia o estabelecimento inteiro), estabelecimento_id — usado pra folga, almoço, férias etc.; entra no mesmo cálculo de disponibilidade que já existe pros agendamentos, não é um sistema separado
 
@@ -123,7 +123,11 @@ Existe um protótipo funcional em React (`agenda-estabelecimento.jsx`, entregue 
 
 ## Clientes
 
-- Tela simples em admin listando os clientes já atendidos (nome, telefone, quantos agendamentos já fez) — vem de graça a partir da tabela `Cliente` nova, sem cadastro manual: todo agendamento novo cria ou atualiza o registro do cliente automaticamente, casando por telefone dentro do mesmo estabelecimento
+- Tela simples em admin listando os clientes já atendidos (nome, telefone, data de nascimento se cadastrada, quantos agendamentos já fez) — vem de graça a partir da tabela `Cliente` nova, sem cadastro manual: todo agendamento novo cria ou atualiza o registro do cliente automaticamente, casando por telefone dentro do mesmo estabelecimento
+- **Cadastro manual**: formulário simples pra adicionar ou editar um cliente direto — nome, telefone (com máscara de telefone brasileiro), data de nascimento (seletor de data de verdade, não campo de texto livre — evita data digitada errada)
+- **Importação em lote**: dois formatos, os dois funcionam igual em qualquer celular (Android ou iPhone) — CSV (planilha) e .vcf (arquivo de contatos exportado nativamente do celular). Cada linha/contato vira um `Cliente`; se o arquivo trouxer data de nascimento, importa também
+- **Aniversariantes**: filtro simples na tela de Clientes pra ver quem faz aniversário no mês (ou na semana) — usa o campo `data_nascimento`
+- **Envio de comunicado de aniversário é manual nesta v1** — o sistema mostra a lista e os dados de contato, mas quem manda a mensagem é o próprio dono, pelo canal que preferir; não é um disparo automático (isso juntaria duas decisões já tomadas: WhatsApp fica de fora por enquanto, e não existe motor de campanha/marketing nesta v1). Se um dia fizer sentido automatizar, é o mesmo padrão dos lembretes por e-mail — mas fica documentado como decisão consciente de não fazer agora, não esquecimento
 - "Cadastro ilimitado de clientes" do comparativo não é uma funcionalidade a construir à parte — é uma consequência de não ter nenhum limite artificial nessa tabela, o que já é o caso por padrão
 
 ## Bloqueio de horários e reagendamento
@@ -185,7 +189,7 @@ No protótipo visual que já existe, os ícones dos serviços de exemplo foram e
 6. Autenticação do admin + deploy
 7. Dashboard: métricas agregadas (agendamentos e faturamento por dia/semana/mês) + motor de sugestões
 8. Agenda semanal/diária, reagendamento, tela de Bloqueio de horários
-9. Tela de Clientes, campo `pago` + separação recebido/a receber no dashboard, exportação CSV
+9. Tela de Clientes (cadastro manual + importação CSV/.vcf + aniversariantes), campo `pago` + separação recebido/a receber no dashboard, exportação CSV
 10. Lembretes automáticos por e-mail (cron)
 11. Bloqueio de acesso por inadimplência: middleware/checagem de `Estabelecimento.ativo` em todas as rotas do admin (login e sessão) e na página pública, com mensagem amigável no lugar do sistema normal quando `ativo = false`
 12. Cadastro e ativação de novos estabelecimentos: página de marketing, formulário de cadastro (cria Usuario dono + Estabelecimento com `ativo = false`), tela pós-cadastro com instrução de pagamento
@@ -205,3 +209,5 @@ No protótipo visual que já existe, os ícones dos serviços de exemplo foram e
 - Integração com Google Agenda ficou fora desta rodada de melhorias — é a peça mais cara de construir (OAuth, API externa, tokens por estabelecimento) e a que menos diferencia o produto pro público-alvo (autônomos/pequenos negócios) comparado a ter a experiência principal rápida e bem feita; reavaliar quando o produto já tiver clientes pagantes validando o resto
 - Quando `Estabelecimento.ativo = false`, bloqueia tudo — admin e página pública — não só o admin
 - Login de plataforma (isenção de pagamento) é uma conta separada de `Usuario`/`Estabelecimento`, sem cadastro público — só pro dono do projeto
+- Comunicado de aniversário de cliente é manual — o sistema só mostra a lista de aniversariantes, quem envia é o dono, pelo canal que preferir; não existe disparo automático nesta v1
+- Importação de clientes é só CSV e .vcf — a API de Contact Picker do navegador foi descartada por só funcionar no Chrome/Android, deixando iPhone de fora
