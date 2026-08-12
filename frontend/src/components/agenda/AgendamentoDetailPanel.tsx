@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { CheckCircle2, CircleDollarSign } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -97,6 +98,29 @@ export function AgendamentoDetailPanel({
                 </div>
               </div>
 
+              <button
+                type="button"
+                onClick={() => handleTogglePago(!agendamento.pago)}
+                disabled={salvandoPago}
+                className={cn(
+                  "flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                  agendamento.pago
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300"
+                    : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
+                )}
+              >
+                {agendamento.pago ? (
+                  <CheckCircle2 className="size-4" />
+                ) : (
+                  <CircleDollarSign className="size-4" />
+                )}
+                {salvandoPago
+                  ? "Atualizando..."
+                  : agendamento.pago
+                    ? "Pago"
+                    : "Marcar como pago"}
+              </button>
+
               <dl className="flex flex-col gap-2 text-sm">
                 {agendamento.profissional_nome && (
                   <div className="flex justify-between">
@@ -115,21 +139,6 @@ export function AgendamentoDetailPanel({
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground">Status</dt>
                   <dd className="font-medium">{STATUS_LABEL[agendamento.status]}</dd>
-                </div>
-                <div className="flex items-center justify-between">
-                  <dt className="text-muted-foreground">Pago</dt>
-                  <dd>
-                    <label className="flex cursor-pointer items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={agendamento.pago}
-                        disabled={salvandoPago}
-                        onChange={(e) => handleTogglePago(e.target.checked)}
-                        className="size-4 rounded border-input accent-primary"
-                      />
-                      <span className="font-medium">{agendamento.pago ? "Sim" : "Não"}</span>
-                    </label>
-                  </dd>
                 </div>
               </dl>
 

@@ -101,22 +101,22 @@ export function HorarioFuncionamentoEditor({
               </label>
             </div>
             {!horario.fechado && (
-              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6 sm:gap-y-2">
                 <div className="flex items-center gap-2">
                   <HoraInput
                     value={horario.abre}
                     onChange={(valor) => atualizarDia(dia, "abre", valor)}
-                    className="flex-1 sm:w-28"
+                    className="flex-1 sm:w-28 sm:flex-none"
                   />
                   <span className="shrink-0 text-sm text-muted-foreground">até</span>
                   <HoraInput
                     value={horario.fecha}
                     onChange={(valor) => atualizarDia(dia, "fecha", valor)}
-                    className="flex-1 sm:w-28"
+                    className="flex-1 sm:w-28 sm:flex-none"
                   />
                 </div>
 
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground sm:ml-2">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <input
                     type="checkbox"
                     checked={temIntervalo}
@@ -131,13 +131,13 @@ export function HorarioFuncionamentoEditor({
                     <HoraInput
                       value={horario.intervalo_inicio}
                       onChange={(valor) => atualizarDia(dia, "intervalo_inicio", valor)}
-                      className="flex-1 sm:w-28"
+                      className="flex-1 sm:w-28 sm:flex-none"
                     />
                     <span className="shrink-0 text-sm text-muted-foreground">até</span>
                     <HoraInput
                       value={horario.intervalo_fim}
                       onChange={(valor) => atualizarDia(dia, "intervalo_fim", valor)}
-                      className="flex-1 sm:w-28"
+                      className="flex-1 sm:w-28 sm:flex-none"
                     />
                   </div>
                 )}
