@@ -42,7 +42,7 @@ export function AgendaSemanal({ dias, agendamentosPorDia, onAgendamentoClick }: 
           return (
             <div
               key={dia.data}
-              className="flex min-h-40 flex-col gap-1 border-r border-border p-1.5 last:border-r-0"
+              className="flex min-h-48 flex-col gap-1 border-r border-border p-1.5 last:border-r-0"
             >
               {visiveis.map((ag) => (
                 <AgendamentoPill key={ag.id} agendamento={ag} onClick={() => onAgendamentoClick(ag)} />

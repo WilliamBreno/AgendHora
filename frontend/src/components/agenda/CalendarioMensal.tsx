@@ -50,7 +50,7 @@ export function CalendarioMensal({
               <div
                 key={dia.data}
                 className={cn(
-                  "flex min-h-24 flex-col gap-1 border-r border-border p-1.5 last:border-r-0",
+                  "flex min-h-32 flex-col gap-1 border-r border-border p-1.5 last:border-r-0",
                   !dia.noMesAtual && "bg-muted/20"
                 )}
               >

@@ -15,16 +15,25 @@ export function AgendamentoPill({ agendamento, onClick }: AgendamentoPillProps) 
     <button
       type="button"
       onClick={onClick}
-      title={agendamento.encaixe ? "Encaixe — sobreposto a outro agendamento" : undefined}
+      title={
+        agendamento.encaixe
+          ? "Encaixe — sobreposto a outro agendamento"
+          : `${agendamento.hora} ${agendamento.cliente_nome} — ${agendamento.servico.nome}`
+      }
       className={cn(
-        "w-full truncate rounded-md px-1.5 py-0.5 text-left text-xs font-medium transition-opacity hover:opacity-80",
+        "flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left transition-opacity hover:opacity-80",
         cores.bgSoft,
         cores.text,
-        cancelado && "line-through opacity-50",
+        cancelado && "opacity-50",
         agendamento.encaixe && "border border-dashed border-current"
       )}
     >
-      {agendamento.hora} {agendamento.cliente_nome}
+      <span className={cn("w-full truncate text-xs font-semibold", cancelado && "line-through")}>
+        {agendamento.hora} {agendamento.cliente_nome}
+      </span>
+      <span className="w-full truncate text-[11px] leading-tight font-normal opacity-80">
+        {agendamento.servico.nome}
+      </span>
     </button>
   )
 }
