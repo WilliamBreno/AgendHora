@@ -106,13 +106,13 @@ export function HorarioFuncionamentoEditor({
                   <HoraInput
                     value={horario.abre}
                     onChange={(valor) => atualizarDia(dia, "abre", valor)}
-                    className="flex-1 sm:w-28 sm:flex-none"
+                    className="flex-1 sm:flex-none"
                   />
                   <span className="shrink-0 text-sm text-muted-foreground">até</span>
                   <HoraInput
                     value={horario.fecha}
                     onChange={(valor) => atualizarDia(dia, "fecha", valor)}
-                    className="flex-1 sm:w-28 sm:flex-none"
+                    className="flex-1 sm:flex-none"
                   />
                 </div>
 
@@ -131,13 +131,13 @@ export function HorarioFuncionamentoEditor({
                     <HoraInput
                       value={horario.intervalo_inicio}
                       onChange={(valor) => atualizarDia(dia, "intervalo_inicio", valor)}
-                      className="flex-1 sm:w-28 sm:flex-none"
+                      className="flex-1 sm:flex-none"
                     />
                     <span className="shrink-0 text-sm text-muted-foreground">até</span>
                     <HoraInput
                       value={horario.intervalo_fim}
                       onChange={(valor) => atualizarDia(dia, "intervalo_fim", valor)}
-                      className="flex-1 sm:w-28 sm:flex-none"
+                      className="flex-1 sm:flex-none"
                     />
                   </div>
                 )}
