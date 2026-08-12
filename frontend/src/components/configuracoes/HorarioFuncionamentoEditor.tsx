@@ -87,9 +87,9 @@ export function HorarioFuncionamentoEditor({
         const horario = form[dia]
         const temIntervalo = !!(horario.intervalo_inicio && horario.intervalo_fim)
         return (
-          <div key={dia} className="flex flex-col gap-2 border-b border-border pb-3 last:border-0">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="w-16 shrink-0 text-sm font-medium">{DIA_LABEL[dia]}</span>
+          <div key={dia} className="flex flex-col gap-3 rounded-lg border border-border p-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium">{DIA_LABEL[dia]}</span>
               <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
                 <input
                   type="checkbox"
@@ -99,23 +99,24 @@ export function HorarioFuncionamentoEditor({
                 />
                 Fechado
               </label>
-              <HoraInput
-                value={horario.abre}
-                disabled={horario.fechado}
-                onChange={(valor) => atualizarDia(dia, "abre", valor)}
-                className="w-32"
-              />
-              <span className="text-sm text-muted-foreground">até</span>
-              <HoraInput
-                value={horario.fecha}
-                disabled={horario.fechado}
-                onChange={(valor) => atualizarDia(dia, "fecha", valor)}
-                className="w-32"
-              />
             </div>
             {!horario.fechado && (
-              <div className="flex flex-wrap items-center gap-3 pl-[76px]">
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <div className="flex items-center gap-2">
+                  <HoraInput
+                    value={horario.abre}
+                    onChange={(valor) => atualizarDia(dia, "abre", valor)}
+                    className="flex-1 sm:w-28"
+                  />
+                  <span className="shrink-0 text-sm text-muted-foreground">até</span>
+                  <HoraInput
+                    value={horario.fecha}
+                    onChange={(valor) => atualizarDia(dia, "fecha", valor)}
+                    className="flex-1 sm:w-28"
+                  />
+                </div>
+
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground sm:ml-2">
                   <input
                     type="checkbox"
                     checked={temIntervalo}
@@ -124,20 +125,21 @@ export function HorarioFuncionamentoEditor({
                   />
                   Intervalo de descanso
                 </label>
+
                 {temIntervalo && (
-                  <>
+                  <div className="flex items-center gap-2">
                     <HoraInput
                       value={horario.intervalo_inicio}
                       onChange={(valor) => atualizarDia(dia, "intervalo_inicio", valor)}
-                      className="w-32"
+                      className="flex-1 sm:w-28"
                     />
-                    <span className="text-xs text-muted-foreground">até</span>
+                    <span className="shrink-0 text-sm text-muted-foreground">até</span>
                     <HoraInput
                       value={horario.intervalo_fim}
                       onChange={(valor) => atualizarDia(dia, "intervalo_fim", valor)}
-                      className="w-32"
+                      className="flex-1 sm:w-28"
                     />
-                  </>
+                  </div>
                 )}
               </div>
             )}

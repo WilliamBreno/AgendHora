@@ -223,6 +223,10 @@ func (h *AgendamentoHandler) List(c *gin.Context) {
 		query = query.Where("profissional_id = ?", profissionalIDStr)
 	}
 
+	if clienteIDStr := c.Query("cliente_id"); clienteIDStr != "" {
+		query = query.Where("cliente_id = ?", clienteIDStr)
+	}
+
 	if inicioStr := c.Query("inicio"); inicioStr != "" {
 		inicio, err := time.Parse("2006-01-02", inicioStr)
 		if err != nil {

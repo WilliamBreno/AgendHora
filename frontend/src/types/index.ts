@@ -40,6 +40,7 @@ export type StatusAgendamento = "pendente" | "confirmado" | "cancelado"
 
 export interface Agendamento {
   id: number
+  cliente_id: number
   cliente_nome: string
   cliente_telefone: string
   cliente_email: string

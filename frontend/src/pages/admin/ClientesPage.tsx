@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ClienteFormDialog } from "@/components/clientes/ClienteFormDialog"
+import { ClienteHistoricoSheet } from "@/components/clientes/ClienteHistoricoSheet"
 import { useClientes, type FiltroAniversariantes } from "@/hooks/useClientes"
 import { ApiError } from "@/lib/api"
 import type { Cliente } from "@/types"
@@ -30,6 +31,7 @@ export function ClientesPage() {
   const { clientes, loading, criar, atualizar, importar } = useClientes(filtro)
   const [dialogAberto, setDialogAberto] = useState(false)
   const [clienteEditando, setClienteEditando] = useState<Cliente | null>(null)
+  const [clienteHistorico, setClienteHistorico] = useState<Cliente | null>(null)
   const [importando, setImportando] = useState(false)
   const inputArquivoRef = useRef<HTMLInputElement>(null)
 
@@ -123,7 +125,16 @@ export function ClientesPage() {
           {clientes.map((cliente) => (
             <div
               key={cliente.id}
-              className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3"
+              role="button"
+              tabIndex={0}
+              onClick={() => setClienteHistorico(cliente)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  setClienteHistorico(cliente)
+                }
+              }}
+              className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 text-left transition-colors hover:bg-accent/50"
             >
               <div className="flex-1">
                 <p className="font-medium">{cliente.nome}</p>
@@ -145,7 +156,10 @@ export function ClientesPage() {
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                onClick={() => abrirEdicao(cliente)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  abrirEdicao(cliente)
+                }}
               >
                 <Pencil className="size-4" />
                 <span className="sr-only">Editar</span>
@@ -162,6 +176,11 @@ export function ClientesPage() {
         onSalvar={(input) =>
           clienteEditando ? atualizar(clienteEditando.id, input) : criar(input)
         }
+      />
+
+      <ClienteHistoricoSheet
+        cliente={clienteHistorico}
+        onOpenChange={(open) => !open && setClienteHistorico(null)}
       />
     </div>
   )
