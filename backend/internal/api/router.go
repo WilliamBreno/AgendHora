@@ -37,7 +37,7 @@ func permitirOrigem(origensExtras []string) func(origin string) bool {
 // exigem JWT (o dono logado) e resolvem a empresa a partir do token; rotas
 // /publico/:slug não exigem login e resolvem a empresa pela URL — é o link
 // que cada dono compartilha com os próprios clientes.
-func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notificador, origensExtras []string, frontendURL string, plataformaSenha string) *gin.Engine {
+func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notificador, origensExtras []string, frontendURL string, plataformaSenha string, pagamentoHandler *handlers.PagamentoHandler) *gin.Engine {
 	router := gin.Default()
 
 	router.Use(cors.New(cors.Config{
@@ -54,7 +54,13 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 
 	gerenciador := authpkg.NovoGerenciador(jwtSecret)
 
-	authHandler := handlers.NewAuthHandler(db, gerenciador)
+	// /webhooks/infinitepay fica fora de /api, sem autenticação de usuário —
+	// é a InfinitePay que chama, não um cliente do frontend (ver CLAUDE.md
+	// "Cadastro e ativação de novos estabelecimentos"). A confirmação real
+	// do pagamento não vem de confiar no payload, e sim de uma segunda
+	// chamada (payment_check) feita dentro do próprio handler.
+	router.POST("/webhooks/infinitepay", pagamentoHandler.Webhook)
+	authHandler := handlers.NewAuthHandler(db, gerenciador, pagamentoHandler)
 	servicoHandler := handlers.NewServicoHandler(db)
 	estabelecimentoHandler := handlers.NewEstabelecimentoHandler(db)
 	agendamentoHandler := handlers.NewAgendamentoHandler(db, notificador)
@@ -105,6 +111,12 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 			admin.PUT("/estabelecimento/logo", authpkg.ExigirDono(), estabelecimentoHandler.AtualizarLogo)
 			admin.PUT("/estabelecimento/aviso", authpkg.ExigirDono(), estabelecimentoHandler.AtualizarAviso)
 
+			// "Meu Plano" (Configurações) e o banner de vencimento — gerar/
+			// reaproveitar o link de renovação e confirmar sem esperar o
+			// webhook (ver CLAUDE.md "Renovação mensal").
+			admin.POST("/estabelecimento/renovar", authpkg.ExigirDono(), pagamentoHandler.Renovar)
+			admin.POST("/estabelecimento/renovar/verificar", authpkg.ExigirDono(), pagamentoHandler.VerificarRenovacao)
+
 			// só o dono convida/vê a equipe — um auxiliar não pode cadastrar
 			// outro profissional.
 			admin.GET("/profissionais", authpkg.ExigirDono(), profissionalHandler.Listar)
@@ -119,9 +131,14 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 			admin.GET("/agendamentos/:id", agendamentoHandler.Get)
 			admin.PATCH("/agendamentos/:id/cancelar", agendamentoHandler.Cancelar)
 			admin.PATCH("/agendamentos/:id/pago", agendamentoHandler.AtualizarPago)
+			admin.PATCH("/agendamentos/:id/financeiro", agendamentoHandler.AtualizarFinanceiro)
 			admin.PATCH("/agendamentos/:id/reagendar", agendamentoHandler.Reagendar)
+			admin.PATCH("/agendamentos/:id/concluir", agendamentoHandler.Concluir)
 
-			admin.GET("/disponibilidade", disponibilidadeHandler.Listar)
+			// versão da disponibilidade que considera concluido_em (ver
+			// CLAUDE.md "Encaixe de horários") — a rota pública usa a mesma
+			// disponibilidadeHandler.Listar de sempre, sempre conservadora.
+			admin.GET("/disponibilidade", disponibilidadeHandler.ListarAdmin)
 
 			// tela simples pro dono marcar um período indisponível (folga,
 			// almoço, feriado) — entra no cálculo de disponibilidade acima.
@@ -153,6 +170,17 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 			publico.POST("/agendamentos", agendamentoHandler.CreatePublico)
 			publico.GET("/meus-agendamentos", agendamentoHandler.MeusAgendamentos)
 			publico.PATCH("/agendamentos/:id/cancelar", agendamentoHandler.CancelarPublico)
+		}
+
+		// /pagamento/:slug é a tela pós-cadastro (ver CLAUDE.md "Cadastro e
+		// ativação de novos estabelecimentos") — de propósito FORA de
+		// SlugMiddleware, que bloqueia estabelecimentos inativos: é
+		// exatamente enquanto o estabelecimento está inativo que essas duas
+		// rotas precisam funcionar.
+		pagamento := apiGroup.Group("/pagamento/:slug")
+		{
+			pagamento.GET("", pagamentoHandler.Status)
+			pagamento.POST("/verificar", pagamentoHandler.Verificar)
 		}
 
 		// /plataforma é de uso pessoal do dono do projeto (ver CLAUDE.md

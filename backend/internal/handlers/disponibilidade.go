@@ -29,11 +29,27 @@ func formatarMinutos(min int) string {
 	return time.Date(0, 1, 1, min/60, min%60, 0, 0, time.UTC).Format("15:04")
 }
 
-// Listar calcula os horários livres de um serviço num dia, pra um
-// profissional específico — a partir do horário de trabalho dele naquele
-// dia da semana (com intervalo de descanso, se houver) e dos agendamentos
-// confirmados que já tem na própria agenda.
+// Listar (rota pública) calcula os horários livres de um serviço num dia,
+// pra um profissional específico — a partir do horário de trabalho dele
+// naquele dia da semana (com intervalo de descanso, se houver) e dos
+// agendamentos confirmados que já tem na própria agenda. Sempre
+// conservadora: nunca considera ConcluidoEm, mesmo que o profissional já
+// tenha terminado um atendimento antes do fim oficial — evita encaixar o
+// cliente sem nenhuma folga pro profissional (ver CLAUDE.md "Encaixe de
+// horários").
 func (h *DisponibilidadeHandler) Listar(c *gin.Context) {
+	h.listar(c, false)
+}
+
+// ListarAdmin é a mesma conta, só que exposta pra rota /admin — considera
+// ConcluidoEm: um atendimento concluído antes do fim oficial libera o resto
+// do horário de verdade, então aparece como disponível na grade que o admin
+// usa (ex: ReagendarDialog), sem precisar de nenhum aviso.
+func (h *DisponibilidadeHandler) ListarAdmin(c *gin.Context) {
+	h.listar(c, true)
+}
+
+func (h *DisponibilidadeHandler) listar(c *gin.Context, considerarConcluido bool) {
 	servicoID, err := strconv.ParseUint(c.Query("servico_id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "parâmetro 'servico_id' inválido"})
@@ -96,7 +112,7 @@ func (h *DisponibilidadeHandler) Listar(c *gin.Context) {
 		return
 	}
 
-	ocupados, err := intervalosOcupados(h.DB, estabelecimentoID, uint(profissionalID), data, 0)
+	ocupados, err := intervalosOcupados(h.DB, estabelecimentoID, uint(profissionalID), data, 0, considerarConcluido)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao verificar disponibilidade"})
 		return

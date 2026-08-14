@@ -1,6 +1,6 @@
 import { useRef, useState } from "react"
 import { toast } from "sonner"
-import { Cake, Pencil, Upload, UserPlus } from "lucide-react"
+import { Cake, Pencil, UserRoundX, Upload, UserPlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -11,14 +11,22 @@ import {
 } from "@/components/ui/select"
 import { ClienteFormDialog } from "@/components/clientes/ClienteFormDialog"
 import { ClienteHistoricoSheet } from "@/components/clientes/ClienteHistoricoSheet"
-import { useClientes, type FiltroAniversariantes } from "@/hooks/useClientes"
+import { useClientes, type FiltroClientes } from "@/hooks/useClientes"
 import { ApiError } from "@/lib/api"
 import type { Cliente } from "@/types"
 
-const FILTRO_LABEL: Record<FiltroAniversariantes, string> = {
+const FILTRO_LABEL: Record<FiltroClientes, string> = {
   todos: "Todos os clientes",
   mes: "Aniversariantes do mês",
   semana: "Aniversariantes da semana",
+  sumidos: "Clientes sumidos",
+}
+
+const EMPTY_LABEL: Record<FiltroClientes, string> = {
+  todos: "Nenhum cliente ainda.",
+  mes: "Ninguém faz aniversário nesse período.",
+  semana: "Ninguém faz aniversário nesse período.",
+  sumidos: "Ninguém sumido — todo mundo agendou nos últimos 60 dias.",
 }
 
 function formatarDataNascimento(iso: string) {
@@ -27,7 +35,7 @@ function formatarDataNascimento(iso: string) {
 }
 
 export function ClientesPage() {
-  const [filtro, setFiltro] = useState<FiltroAniversariantes>("todos")
+  const [filtro, setFiltro] = useState<FiltroClientes>("todos")
   const { clientes, loading, criar, atualizar, importar } = useClientes(filtro)
   const [dialogAberto, setDialogAberto] = useState(false)
   const [clienteEditando, setClienteEditando] = useState<Cliente | null>(null)
@@ -73,14 +81,14 @@ export function ClientesPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={filtro} onValueChange={(v) => setFiltro((v ?? "todos") as FiltroAniversariantes)}>
+          <Select value={filtro} onValueChange={(v) => setFiltro((v ?? "todos") as FiltroClientes)}>
             <SelectTrigger className="w-52">
               <SelectValue placeholder="Todos os clientes">
-                {(v: string | null) => FILTRO_LABEL[(v as FiltroAniversariantes) ?? "todos"]}
+                {(v: string | null) => FILTRO_LABEL[(v as FiltroClientes) ?? "todos"]}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {(Object.keys(FILTRO_LABEL) as FiltroAniversariantes[]).map((f) => (
+              {(Object.keys(FILTRO_LABEL) as FiltroClientes[]).map((f) => (
                 <SelectItem key={f} value={f}>
                   {FILTRO_LABEL[f]}
                 </SelectItem>
@@ -117,9 +125,7 @@ export function ClientesPage() {
       {loading ? (
         <p className="text-sm text-muted-foreground">Carregando...</p>
       ) : clientes.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {filtro === "todos" ? "Nenhum cliente ainda." : "Ninguém faz aniversário nesse período."}
-        </p>
+        <p className="text-sm text-muted-foreground">{EMPTY_LABEL[filtro]}</p>
       ) : (
         <div className="flex flex-col gap-2">
           {clientes.map((cliente) => (
@@ -137,7 +143,15 @@ export function ClientesPage() {
               className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 text-left transition-colors hover:bg-accent/50"
             >
               <div className="flex-1">
-                <p className="font-medium">{cliente.nome}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-medium">{cliente.nome}</p>
+                  {cliente.sumido && (
+                    <span className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                      <UserRoundX className="size-3" />
+                      Sumido
+                    </span>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
                   <span>{cliente.telefone}</span>
                   {cliente.data_nascimento && (

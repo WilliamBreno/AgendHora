@@ -3,15 +3,21 @@ import { toast } from "sonner"
 import { apiAdmin, ApiError } from "@/lib/api"
 import type { Dashboard } from "@/types"
 
-export function useDashboard() {
+// profissionalIds vazio = toda a equipe (sem filtro) — multi-seleção, ver
+// CLAUDE.md "Multi-seleção de profissional".
+export function useDashboard(profissionalIds: number[] = []) {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null)
   const [loading, setLoading] = useState(true)
+  const idsChave = profissionalIds.join(",")
 
   useEffect(() => {
     let cancelado = false
     setLoading(true)
+    const filtro = idsChave
+      ? "?" + idsChave.split(",").map((id) => `profissional_id=${id}`).join("&")
+      : ""
     apiAdmin
-      .get<Dashboard>("/dashboard")
+      .get<Dashboard>(`/dashboard${filtro}`)
       .then((dados) => {
         // defesa extra: nunca deixa um campo de lista chegar como null nos
         // componentes, mesmo que o backend um dia volte a mandar assim
@@ -37,7 +43,7 @@ export function useDashboard() {
     return () => {
       cancelado = true
     }
-  }, [])
+  }, [idsChave])
 
   return { dashboard, loading }
 }

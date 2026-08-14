@@ -7,6 +7,7 @@ import { HorarioFuncionamentoEditor } from "@/components/configuracoes/HorarioFu
 import { LogoUploadField } from "@/components/configuracoes/LogoUploadField"
 import { WhatsAppIntegracaoCard } from "@/components/configuracoes/WhatsAppIntegracaoCard"
 import { AvisoEditor } from "@/components/configuracoes/AvisoEditor"
+import { MeuPlanoCard } from "@/components/configuracoes/MeuPlanoCard"
 import { Button } from "@/components/ui/button"
 
 export function ConfiguracoesPage() {
@@ -18,6 +19,8 @@ export function ConfiguracoesPage() {
     atualizarHorario,
     atualizarLogo,
     atualizarAviso,
+    renovar,
+    verificarRenovacao,
   } = useEstabelecimento()
 
   const linkPublico = estabelecimento ? `${window.location.origin}/${estabelecimento.slug}` : ""
@@ -33,6 +36,14 @@ export function ConfiguracoesPage() {
         <h1 className="font-heading text-2xl font-semibold">Configurações</h1>
         <p className="text-sm text-muted-foreground">Preferências gerais do estabelecimento.</p>
       </div>
+
+      {estabelecimento && (
+        <MeuPlanoCard
+          estabelecimento={estabelecimento}
+          onRenovar={renovar}
+          onVerificar={verificarRenovacao}
+        />
+      )}
 
       <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="font-heading font-medium">Página pública</h2>

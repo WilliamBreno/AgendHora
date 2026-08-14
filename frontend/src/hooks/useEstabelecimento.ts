@@ -87,6 +87,27 @@ export function useEstabelecimento() {
     return resposta
   }
 
+  // renovar gera (ou reaproveita) o link de renovação e abre numa aba nova —
+  // usado pelo banner de vencimento e pelo card "Meu Plano" em Configurações.
+  // Sempre disponível, não só perto do vencimento (renovação adiantada é
+  // permitida, ver CLAUDE.md "Renovação mensal").
+  async function renovar() {
+    const atualizado = await apiAdmin.post<Estabelecimento>("/estabelecimento/renovar", {})
+    setEstabelecimento(atualizado)
+    if (atualizado.link_pagamento_url) {
+      window.open(atualizado.link_pagamento_url, "_blank")
+    }
+    return atualizado
+  }
+
+  // verificarRenovacao é o "já paguei, verificar" da tela "Meu Plano" —
+  // confirma um link de renovação pendente sem esperar o webhook.
+  async function verificarRenovacao() {
+    const atualizado = await apiAdmin.post<Estabelecimento>("/estabelecimento/renovar/verificar", {})
+    setEstabelecimento(atualizado)
+    return atualizado
+  }
+
   return {
     estabelecimento,
     loading,
@@ -95,6 +116,8 @@ export function useEstabelecimento() {
     atualizarHorario,
     atualizarLogo,
     atualizarAviso,
+    renovar,
+    verificarRenovacao,
     recarregar: carregar,
   }
 }

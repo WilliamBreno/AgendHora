@@ -36,6 +36,16 @@ type agendamentoInput struct {
 	// detectado (ver comentário no model). Só é respeitado em criação feita
 	// pelo admin — a rota pública nunca aceita encaixe.
 	Encaixe bool `json:"encaixe"`
+	// LinkReferencia é aceito tanto no admin quanto na rota pública — é o
+	// cliente quem cola o link (ver CLAUDE.md "Segmentos de negócio").
+	LinkReferencia string `json:"link_referencia"`
+	// ValorFinal/ValorSinal/SinalPago só têm efeito quando a criação vem do
+	// admin (permitirAdmin=true) — a rota pública ignora esses três campos
+	// mesmo que venham preenchidos, pra um cliente não conseguir definir o
+	// próprio preço final ou marcar o próprio sinal como pago.
+	ValorFinal *float64 `json:"valor_final"`
+	ValorSinal *float64 `json:"valor_sinal"`
+	SinalPago  bool     `json:"sinal_pago"`
 }
 
 // agendamentoResponse formata Data como "2006-01-02" (o model guarda um
@@ -59,6 +69,11 @@ type agendamentoResponse struct {
 	Observacoes       string                   `json:"observacoes"`
 	Encaixe           bool                     `json:"encaixe"`
 	Pago              bool                     `json:"pago"`
+	ValorFinal        *float64                 `json:"valor_final"`
+	ValorSinal        *float64                 `json:"valor_sinal"`
+	SinalPago         bool                     `json:"sinal_pago"`
+	LinkReferencia    string                   `json:"link_referencia"`
+	ConcluidoEm       *time.Time               `json:"concluido_em"`
 	EstabelecimentoID uint                     `json:"estabelecimento_id"`
 	CreatedAt         time.Time                `json:"created_at"`
 	UpdatedAt         time.Time                `json:"updated_at"`
@@ -81,6 +96,11 @@ func toAgendamentoResponse(a models.Agendamento) agendamentoResponse {
 		Observacoes:       a.Observacoes,
 		Encaixe:           a.Encaixe,
 		Pago:              a.Pago,
+		ValorFinal:        a.ValorFinal,
+		ValorSinal:        a.ValorSinal,
+		SinalPago:         a.SinalPago,
+		LinkReferencia:    a.LinkReferencia,
+		ConcluidoEm:       a.ConcluidoEm,
 		EstabelecimentoID: a.EstabelecimentoID,
 		CreatedAt:         a.CreatedAt,
 		UpdatedAt:         a.UpdatedAt,
@@ -149,8 +169,10 @@ func apenasDigitos(s string) string {
 }
 
 type intervaloOcupado struct {
-	inicio int
-	fim    int
+	inicio      int
+	fim         int
+	clienteNome string
+	servicoNome string
 }
 
 func sobrepoe(aInicio, aFim, bInicio, bFim int) bool {
@@ -161,10 +183,18 @@ func sobrepoe(aInicio, aFim, bInicio, bFim int) bool {
 // por agendamentos confirmados de UM profissional naquele dia — cada
 // profissional tem sua própria agenda, então o de outro colega não conta
 // como conflito. ignorarID exclui o próprio registro (útil ao reagendar).
+//
+// considerarConcluido decide se um atendimento com ConcluidoEm preenchido
+// antes do fim oficial (Hora + Servico.DuracaoMin) libera o resto do
+// horário de verdade — ver CLAUDE.md "Encaixe de horários". A página
+// pública sempre chama isso com false (conservadora, nunca muda mesmo com
+// ConcluidoEm existindo); o admin (grade de horários e checagem de
+// conflito ao criar/reagendar manualmente) chama com true.
+//
 // Função livre (não presa a AgendamentoHandler) porque o motor de
 // disponibilidade também precisa dela.
-func intervalosOcupados(db *gorm.DB, estabelecimentoID, profissionalID uint, data time.Time, ignorarID uint) ([]intervaloOcupado, error) {
-	query := db.Preload("Servico").
+func intervalosOcupados(db *gorm.DB, estabelecimentoID, profissionalID uint, data time.Time, ignorarID uint, considerarConcluido bool) ([]intervaloOcupado, error) {
+	query := db.Preload("Servico").Preload("Cliente").
 		Where(
 			"estabelecimento_id = ? AND profissional_id = ? AND data = ? AND status = ?",
 			estabelecimentoID, profissionalID, data, models.StatusConfirmado,
@@ -184,31 +214,58 @@ func intervalosOcupados(db *gorm.DB, estabelecimentoID, profissionalID uint, dat
 		if err != nil {
 			continue
 		}
-		intervalos = append(intervalos, intervaloOcupado{inicio: inicio, fim: inicio + ag.Servico.DuracaoMin})
+		fim := inicio + ag.Servico.DuracaoMin
+		if considerarConcluido && ag.ConcluidoEm != nil {
+			concluidoMin := ag.ConcluidoEm.Hour()*60 + ag.ConcluidoEm.Minute()
+			if concluidoMin < fim {
+				fim = concluidoMin
+			}
+		}
+		intervalos = append(intervalos, intervaloOcupado{
+			inicio: inicio, fim: fim,
+			clienteNome: ag.Cliente.Nome, servicoNome: ag.Servico.Nome,
+		})
 	}
 	return intervalos, nil
+}
+
+// conflitoDetalhe descreve com qual agendamento existente um horário
+// esbarra — usado na resposta 409 pra que o admin veja "esse horário
+// conflita com Fulano — Corte, 14:00–14:30" em vez de um aviso genérico.
+type conflitoDetalhe struct {
+	ClienteNome string `json:"cliente_nome"`
+	ServicoNome string `json:"servico_nome"`
+	Inicio      string `json:"inicio"`
+	Fim         string `json:"fim"`
 }
 
 // haConflito verifica se [hora, hora+duracaoMin) esbarra em algum agendamento
 // confirmado já existente naquele dia NA AGENDA DESSE PROFISSIONAL — cada
 // profissional (dono ou auxiliar) tem sua própria agenda independente.
-func (h *AgendamentoHandler) haConflito(estabelecimentoID, profissionalID uint, data time.Time, hora string, duracaoMin int, ignorarID uint) (bool, error) {
+// considerarConcluido: ver intervalosOcupados. Devolve nil quando não há
+// conflito.
+func (h *AgendamentoHandler) haConflito(estabelecimentoID, profissionalID uint, data time.Time, hora string, duracaoMin int, ignorarID uint, considerarConcluido bool) (*conflitoDetalhe, error) {
 	inicio, err := minutosDoDia(hora)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	fim := inicio + duracaoMin
 
-	ocupados, err := intervalosOcupados(h.DB, estabelecimentoID, profissionalID, data, ignorarID)
+	ocupados, err := intervalosOcupados(h.DB, estabelecimentoID, profissionalID, data, ignorarID, considerarConcluido)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	for _, o := range ocupados {
 		if sobrepoe(inicio, fim, o.inicio, o.fim) {
-			return true, nil
+			return &conflitoDetalhe{
+				ClienteNome: o.clienteNome,
+				ServicoNome: o.servicoNome,
+				Inicio:      formatarMinutos(o.inicio),
+				Fim:         formatarMinutos(o.fim),
+			}, nil
 		}
 	}
-	return false, nil
+	return nil, nil
 }
 
 func (h *AgendamentoHandler) List(c *gin.Context) {
@@ -216,11 +273,13 @@ func (h *AgendamentoHandler) List(c *gin.Context) {
 		Where("estabelecimento_id = ?", auth.EstabelecimentoID(c))
 
 	// um auxiliar só vê a própria agenda, nunca a dos colegas; o dono vê
-	// tudo por padrão e pode filtrar por profissional_id se quiser.
+	// tudo por padrão e pode filtrar por um ou mais profissional_id (multi-
+	// seleção, ver CLAUDE.md — repete o parâmetro na query string, ex:
+	// ?profissional_id=1&profissional_id=2).
 	if auth.Papel(c) == models.PapelAuxiliar {
 		query = query.Where("profissional_id = ?", auth.UsuarioID(c))
-	} else if profissionalIDStr := c.Query("profissional_id"); profissionalIDStr != "" {
-		query = query.Where("profissional_id = ?", profissionalIDStr)
+	} else if profissionalIDs := c.QueryArray("profissional_id"); len(profissionalIDs) > 0 {
+		query = query.Where("profissional_id IN ?", profissionalIDs)
 	}
 
 	if clienteIDStr := c.Query("cliente_id"); clienteIDStr != "" {
@@ -336,14 +395,18 @@ func (h *AgendamentoHandler) criar(c *gin.Context, permitirAdmin bool) {
 		return
 	}
 
-	conflito, err := h.haConflito(estabelecimentoID, profissionalID, data, input.Hora, servico.DuracaoMin, 0)
+	// considerarConcluido = permitirAdmin: só o admin se beneficia de um
+	// atendimento concluído antes do fim oficial liberar o horário — a rota
+	// pública continua sempre conservadora (ver CLAUDE.md "Encaixe de
+	// horários").
+	conflito, err := h.haConflito(estabelecimentoID, profissionalID, data, input.Hora, servico.DuracaoMin, 0, permitirAdmin)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao verificar disponibilidade"})
 		return
 	}
-	encaixe := conflito && permitirAdmin && input.Encaixe
-	if conflito && !encaixe {
-		c.JSON(http.StatusConflict, gin.H{"error": "horário indisponível"})
+	encaixe := conflito != nil && permitirAdmin && input.Encaixe
+	if conflito != nil && !encaixe {
+		c.JSON(http.StatusConflict, gin.H{"error": "horário indisponível", "conflito": conflito})
 		return
 	}
 
@@ -365,7 +428,17 @@ func (h *AgendamentoHandler) criar(c *gin.Context, permitirAdmin bool) {
 		Status:            models.StatusConfirmado,
 		Observacoes:       strings.TrimSpace(input.Observacoes),
 		Encaixe:           encaixe,
+		LinkReferencia:    strings.TrimSpace(input.LinkReferencia),
 		EstabelecimentoID: estabelecimentoID,
+	}
+	// ValorFinal/ValorSinal/SinalPago só vêm do admin — a rota pública
+	// (permitirAdmin=false) nunca deixa o cliente definir o próprio preço
+	// final ou marcar o próprio sinal como pago (ver comentário em
+	// agendamentoInput).
+	if permitirAdmin {
+		agendamento.ValorFinal = input.ValorFinal
+		agendamento.ValorSinal = input.ValorSinal
+		agendamento.SinalPago = input.SinalPago
 	}
 	if err := h.DB.Create(&agendamento).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao criar agendamento"})
@@ -499,6 +572,90 @@ func (h *AgendamentoHandler) AtualizarPago(c *gin.Context) {
 	c.JSON(http.StatusOK, toAgendamentoResponse(*agendamento))
 }
 
+type atualizarFinanceiroInput struct {
+	ValorFinal     *float64 `json:"valor_final"`
+	ValorSinal     *float64 `json:"valor_sinal"`
+	SinalPago      bool     `json:"sinal_pago"`
+	LinkReferencia string   `json:"link_referencia"`
+}
+
+// AtualizarFinanceiro edita os campos extras de "Segmentos de negócio" no
+// painel de detalhe (valor final, sinal, link de referência) — mesma regra
+// de dono/auxiliar do resto do painel: auxiliar só mexe na própria agenda.
+// Usa Updates com um map (não Save) pra um valor_final/valor_sinal
+// explicitamente limpo (nil) gravar como NULL de verdade, não ficar de fora
+// do update por ser o zero-value de um ponteiro.
+func (h *AgendamentoHandler) AtualizarFinanceiro(c *gin.Context) {
+	agendamento, ok := h.buscarAgendamento(c)
+	if !ok {
+		return
+	}
+	if auth.Papel(c) == models.PapelAuxiliar && agendamento.ProfissionalID != auth.UsuarioID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "você só pode editar agendamentos da sua própria agenda"})
+		return
+	}
+
+	var input atualizarFinanceiroInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if input.ValorFinal != nil && *input.ValorFinal < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "valor final não pode ser negativo"})
+		return
+	}
+	if input.ValorSinal != nil && *input.ValorSinal < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "valor do sinal não pode ser negativo"})
+		return
+	}
+
+	linkReferencia := strings.TrimSpace(input.LinkReferencia)
+	err := h.DB.Model(agendamento).Updates(map[string]any{
+		"valor_final":     input.ValorFinal,
+		"valor_sinal":     input.ValorSinal,
+		"sinal_pago":      input.SinalPago,
+		"link_referencia": linkReferencia,
+	}).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao atualizar agendamento"})
+		return
+	}
+	agendamento.ValorFinal = input.ValorFinal
+	agendamento.ValorSinal = input.ValorSinal
+	agendamento.SinalPago = input.SinalPago
+	agendamento.LinkReferencia = linkReferencia
+
+	c.JSON(http.StatusOK, toAgendamentoResponse(*agendamento))
+}
+
+// Concluir registra ConcluidoEm com o horário atual — botão "Concluir
+// agora" no painel de detalhe de qualquer agendamento confirmado (ver
+// CLAUDE.md "Encaixe de horários"). Só disponível pra agendamentos ainda
+// confirmados; mesma regra de dono/auxiliar do resto do painel.
+func (h *AgendamentoHandler) Concluir(c *gin.Context) {
+	agendamento, ok := h.buscarAgendamento(c)
+	if !ok {
+		return
+	}
+	if auth.Papel(c) == models.PapelAuxiliar && agendamento.ProfissionalID != auth.UsuarioID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "você só pode concluir agendamentos da sua própria agenda"})
+		return
+	}
+	if agendamento.Status != models.StatusConfirmado {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "só é possível concluir um agendamento confirmado"})
+		return
+	}
+
+	agora := time.Now()
+	if err := h.DB.Model(agendamento).Update("concluido_em", agora).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao concluir agendamento"})
+		return
+	}
+	agendamento.ConcluidoEm = &agora
+
+	c.JSON(http.StatusOK, toAgendamentoResponse(*agendamento))
+}
+
 type reagendarInput struct {
 	Data    string `json:"data" binding:"required"` // "2006-01-02"
 	Hora    string `json:"hora" binding:"required"` // "15:04"
@@ -539,17 +696,19 @@ func (h *AgendamentoHandler) Reagendar(c *gin.Context) {
 		return
 	}
 
+	// Reagendar é rota exclusiva do admin (não existe pra rota pública), então
+	// considerarConcluido é sempre true — ver CLAUDE.md "Encaixe de horários".
 	conflito, err := h.haConflito(
 		agendamento.EstabelecimentoID, agendamento.ProfissionalID,
-		data, input.Hora, agendamento.Servico.DuracaoMin, agendamento.ID,
+		data, input.Hora, agendamento.Servico.DuracaoMin, agendamento.ID, true,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao verificar disponibilidade"})
 		return
 	}
-	encaixe := conflito && input.Encaixe
-	if conflito && !encaixe {
-		c.JSON(http.StatusConflict, gin.H{"error": "horário indisponível"})
+	encaixe := conflito != nil && input.Encaixe
+	if conflito != nil && !encaixe {
+		c.JSON(http.StatusConflict, gin.H{"error": "horário indisponível", "conflito": conflito})
 		return
 	}
 

@@ -19,6 +19,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { ThemeToggle } from "@/components/common/ThemeToggle"
 import { useAuth } from "@/contexts/AuthContext"
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus"
+import { VencimentoBanner } from "@/components/layout/VencimentoBanner"
 
 const NAV_ITEMS_BASE = [
   { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -149,42 +150,45 @@ export function AdminLayout() {
   }, [pathname])
 
   return (
-    <div className="flex min-h-svh flex-col bg-background text-foreground md:flex-row">
-      <header className="flex items-center justify-between border-b border-border p-3 md:hidden">
-        <Marca />
-        <div className="flex items-center gap-1">
-          <ThemeToggle />
-          <Button variant="ghost" size="icon-sm" onClick={() => setMenuAberto(true)}>
-            <Menu className="size-5" />
-            <span className="sr-only">Abrir menu</span>
-          </Button>
-        </div>
-      </header>
-
-      <aside className="hidden w-56 shrink-0 flex-col gap-1 border-r border-border p-4 md:flex">
-        <div className="mb-4 flex items-center justify-between">
+    <div className="flex min-h-svh flex-col bg-background text-foreground">
+      <VencimentoBanner />
+      <div className="flex flex-1 flex-col md:flex-row">
+        <header className="flex items-center justify-between border-b border-border p-3 md:hidden">
           <Marca />
-          <ThemeToggle />
-        </div>
-        <NavLinks />
-        <RodapeConta />
-      </aside>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <Button variant="ghost" size="icon-sm" onClick={() => setMenuAberto(true)}>
+              <Menu className="size-5" />
+              <span className="sr-only">Abrir menu</span>
+            </Button>
+          </div>
+        </header>
 
-      <Sheet open={menuAberto} onOpenChange={setMenuAberto}>
-        <SheetContent side="left" className="flex w-64 flex-col">
-          <SheetHeader>
-            <SheetTitle>Menu</SheetTitle>
-          </SheetHeader>
-          <nav className="flex flex-1 flex-col gap-1 px-4">
-            <NavLinks onNavigate={() => setMenuAberto(false)} />
-            <RodapeConta />
-          </nav>
-        </SheetContent>
-      </Sheet>
+        <aside className="hidden w-56 shrink-0 flex-col gap-1 border-r border-border p-4 md:flex">
+          <div className="mb-4 flex items-center justify-between">
+            <Marca />
+            <ThemeToggle />
+          </div>
+          <NavLinks />
+          <RodapeConta />
+        </aside>
 
-      <main className="flex-1 overflow-y-auto p-4 md:p-8">
-        <Outlet />
-      </main>
+        <Sheet open={menuAberto} onOpenChange={setMenuAberto}>
+          <SheetContent side="left" className="flex w-64 flex-col">
+            <SheetHeader>
+              <SheetTitle>Menu</SheetTitle>
+            </SheetHeader>
+            <nav className="flex flex-1 flex-col gap-1 px-4">
+              <NavLinks onNavigate={() => setMenuAberto(false)} />
+              <RodapeConta />
+            </nav>
+          </SheetContent>
+        </Sheet>
+
+        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }

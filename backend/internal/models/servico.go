@@ -15,12 +15,18 @@ var CoresServico = []string{
 
 // Servico é um serviço oferecido pelo estabelecimento (ex: corte, manicure, massagem).
 type Servico struct {
-	ID    uint    `gorm:"primaryKey" json:"id"`
-	Nome  string  `gorm:"not null" json:"nome"`
-	Preco float64 `gorm:"not null" json:"preco"`
+	ID   uint   `gorm:"primaryKey" json:"id"`
+	Nome string `gorm:"not null" json:"nome"`
+	// Preco é opcional — nil (sem preço cadastrado) faz a página pública
+	// mostrar "a combinar" no lugar do valor. Útil pra estabelecimentos com
+	// lógica de preço variável por atendimento (ex: segmento "tatuagem" —
+	// ver CLAUDE.md "Segmentos de negócio"), mas não é exclusivo de nenhum
+	// segmento.
+	Preco *float64 `json:"preco"`
 	// PrecoAPartir marca o preço como uma estimativa mínima ("a partir de
 	// R$X"), pra serviços cujo valor final varia (ex: depende do cabelo,
-	// do procedimento escolhido na hora etc).
+	// do procedimento escolhido na hora etc) — só faz sentido quando Preco
+	// não é nil.
 	PrecoAPartir bool   `gorm:"not null;default:false" json:"preco_a_partir"`
 	DuracaoMin   int    `gorm:"not null" json:"duracao_min"`
 	Descricao    string `json:"descricao"`

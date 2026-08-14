@@ -13,7 +13,9 @@ export type CorServico = (typeof CORES_SERVICO)[number]
 export interface Servico {
   id: number
   nome: string
-  preco: number
+  // preco null = sem preço cadastrado — página pública mostra "a combinar"
+  // (ver CLAUDE.md "Segmentos de negócio").
+  preco: number | null
   preco_a_partir: boolean
   duracao_min: number
   descricao: string
@@ -27,7 +29,7 @@ export interface Servico {
 
 export interface ServicoInput {
   nome: string
-  preco: number
+  preco: number | null
   preco_a_partir: boolean
   duracao_min: number
   descricao: string
@@ -54,9 +56,31 @@ export interface Agendamento {
   observacoes: string
   encaixe: boolean
   pago: boolean
+  // valor_final (opcional) sobrescreve o preço do serviço no faturamento —
+  // vale pra qualquer estabelecimento, não só quem usa segmento "tatuagem"
+  // (ver CLAUDE.md "Segmentos de negócio"). Só editável pelo admin.
+  valor_final: number | null
+  // valor_sinal + sinal_pago são o depósito antecipado. Só editáveis pelo admin.
+  valor_sinal: number | null
+  sinal_pago: boolean
+  // link_referencia é texto simples (não upload) — o cliente cola no
+  // formulário público, ou o admin edita depois pelo painel de detalhe.
+  link_referencia: string
+  // concluido_em: quando o atendimento terminou de verdade (botão "Concluir
+  // agora"), null até então — ver CLAUDE.md "Encaixe de horários".
+  concluido_em: string | null
   estabelecimento_id: number
   created_at: string
   updated_at: string
+}
+
+// Detalhe de conflito devolvido no corpo do 409 (ver CLAUDE.md "Encaixe de
+// horários") — qual agendamento existente esbarra no horário escolhido.
+export interface ConflitoAgendamento {
+  cliente_nome: string
+  servico_nome: string
+  inicio: string // "HH:MM"
+  fim: string // "HH:MM"
 }
 
 export interface AgendamentoInput {
@@ -69,6 +93,13 @@ export interface AgendamentoInput {
   hora: string
   observacoes: string
   encaixe?: boolean
+  link_referencia?: string
+  // ignorados pelo backend quando a requisição não vem do admin (ver
+  // CLAUDE.md "Segmentos de negócio") — presentes aqui só pro formulário
+  // do admin conseguir mandar.
+  valor_final?: number | null
+  valor_sinal?: number | null
+  sinal_pago?: boolean
 }
 
 // Papel do usuário logado — define o que ele pode acessar (ver CLAUDE.md,
@@ -170,13 +201,41 @@ export interface Estabelecimento {
   // plano é sempre "padrao" hoje (plano único) — guardado desde já pra não
   // exigir migration quando outros planos forem definidos.
   plano: string
-  // ativo controla o acesso enquanto a cobrança é manual (Pix) — ver
-  // CLAUDE.md "Cadastro e ativação de novos estabelecimentos" e o middleware
-  // ExigirEstabelecimentoAtivo no backend, que bloqueia admin e página
-  // pública quando false.
+  // segmento controla o que aparece em destaque nas telas (hoje: "geral" ou
+  // "tatuagem", que mostra sinal + link de referência em destaque no
+  // painel do agendamento) — trocado direto no banco pelo dono do
+  // projeto, não é self-service nesta v1 (ver CLAUDE.md "Segmentos de
+  // negócio").
+  segmento: string
+  // ativo controla o acesso enquanto a cobrança InfinitePay não confirma —
+  // ver CLAUDE.md "Cadastro e ativação de novos estabelecimentos" e o
+  // middleware ExigirEstabelecimentoAtivo no backend, que bloqueia admin e
+  // página pública quando false.
   ativo: boolean
+  // isento marca quem nunca deve ser cobrado (uso pessoal do dono do
+  // projeto) — quando true, a tela "Meu Plano" mostra só "acesso gratuito"
+  // e nem o banner de vencimento nem proximo_vencimento fazem sentido.
+  isento: boolean
+  isento_ate: string | null
+  // proximo_vencimento é sempre "data do último pagamento + 30 dias" — nulo
+  // pra quem é isento ou pra contas ativas anteriores à cobrança automática
+  // que nunca passaram pelo fluxo de pagamento (ver CLAUDE.md "Renovação
+  // mensal").
+  proximo_vencimento: string | null
+  // link_pagamento_url é o link InfinitePay do ciclo de cobrança atual —
+  // vazio quando isento, já pago, ou quando ainda não foi gerado.
+  link_pagamento_url: string
   created_at: string
   updated_at: string
+}
+
+// Resposta da rota pública /api/pagamento/:slug (tela pós-cadastro) —
+// deliberadamente mais enxuta que Estabelecimento inteiro, já que essa rota
+// não exige login.
+export interface PagamentoStatus {
+  ativo: boolean
+  isento: boolean
+  link_pagamento_url: string
 }
 
 export interface EstabelecimentoDadosInput {
@@ -255,6 +314,11 @@ export interface Cliente {
   // agendamento; só existe se cadastrado/editado manualmente ou importado).
   data_nascimento: string | null
   agendamentos_count: number
+  // "YYYY-MM-DD" do último agendamento confirmado, ou null se nunca agendou.
+  ultimo_agendamento_em: string | null
+  // sumido = já agendou alguma vez mas não agenda há mais de 60 dias (ver
+  // CLAUDE.md "Clientes") — nunca true pra quem nunca agendou.
+  sumido: boolean
   created_at: string
 }
 

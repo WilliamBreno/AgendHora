@@ -31,7 +31,7 @@ function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/cadastro" element={<CadastroPage />} />
-            <Route path="/cadastro/pagamento" element={<PagamentoPendentePage />} />
+            <Route path="/cadastro/pagamento/:slug" element={<PagamentoPendentePage />} />
             {/* /registro é o link antigo — mantido redirecionando pra não quebrar quem já tinha salvo */}
             <Route path="/registro" element={<Navigate to="/cadastro" replace />} />
             <Route path="/convite/:token" element={<ConvitePage />} />

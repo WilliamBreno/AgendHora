@@ -17,11 +17,22 @@ type Config struct {
 	AllowedOrigins     []string
 	JWTSecret          string
 	FrontendURL        string
+	// BackendURL é a URL pública deste próprio backend — usada só pra montar
+	// o webhook_url mandado à InfinitePay na criação do link de pagamento
+	// (ver internal/handlers.PagamentoHandler). Em dev, localhost não é
+	// alcançável pela InfinitePay — o webhook simplesmente não chega, mas o
+	// botão "já paguei, verificar" continua funcionando normalmente.
+	BackendURL string
 	// PlataformaSenha é a credencial única do login de plataforma (uso
 	// pessoal do dono do projeto — ver "Isenção de pagamento" no
 	// CLAUDE.md). Vazia desliga o recurso — não tem cadastro público nem
 	// fluxo de recuperação, só essa variável de ambiente.
 	PlataformaSenha string
+	// InfinitePayHandle é a InfiniteTag (handle, sem o "$") do recebedor —
+	// única credencial que a API pública de Checkout Integrado exige (ver
+	// internal/infinitepay). Vazia desliga a geração automática de link de
+	// pagamento; o cadastro continua funcionando, só nasce sem link.
+	InfinitePayHandle string
 }
 
 // Load lê o .env (se existir) e as variáveis de ambiente do processo.
@@ -66,9 +77,19 @@ func Load() Config {
 		frontendURL = "http://localhost:5173"
 	}
 
+	backendURL := os.Getenv("BACKEND_URL")
+	if backendURL == "" {
+		backendURL = "http://localhost:" + port
+	}
+
 	plataformaSenha := os.Getenv("PLATFORM_ADMIN_SENHA")
 	if plataformaSenha == "" {
 		log.Println("aviso: PLATFORM_ADMIN_SENHA não definida — login de plataforma desligado")
+	}
+
+	infinitePayHandle := os.Getenv("INFINITEPAY_HANDLE")
+	if infinitePayHandle == "" {
+		log.Println("aviso: INFINITEPAY_HANDLE não definida — geração automática de link de pagamento desligada")
 	}
 
 	return Config{
@@ -80,6 +101,8 @@ func Load() Config {
 		AllowedOrigins:     origensExtras,
 		JWTSecret:          jwtSecret,
 		FrontendURL:        frontendURL,
+		BackendURL:         backendURL,
 		PlataformaSenha:    plataformaSenha,
+		InfinitePayHandle:  infinitePayHandle,
 	}
 }

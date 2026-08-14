@@ -38,9 +38,11 @@ export function CadastroPage() {
         // ativo=false: a conta existe mas ainda não deve funcionar como uma
         // sessão de verdade — sem isso, o token guardado dispara o
         // redirecionamento de sessão expulsa (ExigirEstabelecimentoAtivo)
-        // na próxima página que o dono visitar, até em cima do /login.
+        // na próxima página que o dono visitar, até em cima do /login. A
+        // tela de pagamento não precisa de sessão: identifica a empresa
+        // pelo slug na própria URL (rota pública /api/pagamento/:slug).
         logout()
-        navigate("/cadastro/pagamento")
+        navigate(`/cadastro/pagamento/${resposta.estabelecimento.slug}`)
       }
     } catch (err) {
       setErro(err instanceof ApiError ? err.message : "Erro ao criar conta")

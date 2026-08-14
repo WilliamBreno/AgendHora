@@ -9,6 +9,10 @@ export interface DadosCliente {
   cliente_telefone: string
   cliente_email: string
   observacoes: string
+  // link de uma imagem de referência hospedada em outro lugar (ex: estúdio
+  // de tatuagem) — texto simples, não é upload de arquivo nesta v1 (ver
+  // CLAUDE.md "Segmentos de negócio").
+  link_referencia: string
 }
 
 interface DadosClienteFormProps {
@@ -22,6 +26,7 @@ const FORM_VAZIO: DadosCliente = {
   cliente_telefone: "",
   cliente_email: "",
   observacoes: "",
+  link_referencia: "",
 }
 
 export function DadosClienteForm({ enviando, erro, onSubmit }: DadosClienteFormProps) {
@@ -73,6 +78,15 @@ export function DadosClienteForm({ enviando, erro, onSubmit }: DadosClienteFormP
           value={form.observacoes}
           onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))}
           rows={2}
+        />
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="link_referencia_publico">Link de referência (opcional)</Label>
+        <Input
+          id="link_referencia_publico"
+          value={form.link_referencia}
+          onChange={(e) => setForm((f) => ({ ...f, link_referencia: e.target.value }))}
+          placeholder="Cole aqui o link de uma imagem de referência, se quiser"
         />
       </div>
       {(erroLocal || erro) && <p className="text-sm text-destructive">{erroLocal ?? erro}</p>}

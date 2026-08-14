@@ -3,17 +3,23 @@ import { toast } from "sonner"
 import { apiAdmin, enviarArquivoAdmin, ApiError } from "@/lib/api"
 import type { Cliente, ClienteInput, ImportacaoClientesResultado } from "@/types"
 
-export type FiltroAniversariantes = "todos" | "mes" | "semana"
+export type FiltroClientes = "todos" | "mes" | "semana" | "sumidos"
 
-export function useClientes(filtro: FiltroAniversariantes = "todos") {
+const FILTRO_QUERY: Record<FiltroClientes, string> = {
+  todos: "",
+  mes: "?aniversariantes=mes",
+  semana: "?aniversariantes=semana",
+  sumidos: "?sumidos=true",
+}
+
+export function useClientes(filtro: FiltroClientes = "todos") {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
 
   const carregar = useCallback(async () => {
     setLoading(true)
     try {
-      const query = filtro === "todos" ? "" : `?aniversariantes=${filtro}`
-      const dados = await apiAdmin.get<Cliente[]>(`/clientes${query}`)
+      const dados = await apiAdmin.get<Cliente[]>(`/clientes${FILTRO_QUERY[filtro]}`)
       setClientes(dados)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Erro ao carregar clientes")

@@ -109,6 +109,43 @@ func (n *Notificador) NotificarConviteProfissional(estabelecimento models.Estabe
 	)
 }
 
+// NotificarRenovacaoPendente é a rotina diária de renovação avisando o dono
+// (ver internal/renovacao) — dispara quando o vencimento está a poucos dias
+// (ou já passou, mas sem link gerado ainda). Sem e-mail cadastrado do
+// estabelecimento, não há como avisar automaticamente; o dono ainda vê o
+// banner de vencimento dentro do admin.
+func (n *Notificador) NotificarRenovacaoPendente(estabelecimento models.Estabelecimento, diasRestantes int, link string) {
+	if n == nil || estabelecimento.Email == "" {
+		return
+	}
+	assunto := "Sua assinatura AgendHora vence em breve"
+	if diasRestantes <= 0 {
+		assunto = "Sua assinatura AgendHora venceu"
+	}
+	n.enviar(estabelecimento.Email, assunto, emailRenovacaoPendenteHTML(estabelecimento, diasRestantes, link))
+}
+
+// NotificarResumoSemanal é o e-mail automático de toda segunda-feira pro
+// dono (ver internal/resumosemanal) — faturamento e número de agendamentos
+// da semana anterior, mais a sugestão do dashboard daquele momento. Sem
+// e-mail cadastrado no estabelecimento, não há como avisar.
+func (n *Notificador) NotificarResumoSemanal(
+	estabelecimento models.Estabelecimento,
+	faturamento float64,
+	quantidade int,
+	sugestaoTitulo, sugestaoDescricao string,
+	temSugestao bool,
+) {
+	if n == nil || estabelecimento.Email == "" {
+		return
+	}
+	n.enviar(
+		estabelecimento.Email,
+		"Resumo da semana — "+estabelecimento.Nome,
+		emailResumoSemanalHTML(estabelecimento, faturamento, quantidade, sugestaoTitulo, sugestaoDescricao, temSugestao),
+	)
+}
+
 type brevoDestinatario struct {
 	Email string `json:"email"`
 }

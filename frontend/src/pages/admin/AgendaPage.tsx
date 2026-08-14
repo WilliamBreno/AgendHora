@@ -2,13 +2,7 @@ import { useMemo, useState } from "react"
 import { ChevronLeft, ChevronRight, Clock, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { FiltroProfissionalMultiSelect } from "@/components/common/FiltroProfissionalMultiSelect"
 import { CalendarioMensal } from "@/components/agenda/CalendarioMensal"
 import { AgendaSemanal } from "@/components/agenda/AgendaSemanal"
 import { AgendaDiaria } from "@/components/agenda/AgendaDiaria"
@@ -35,6 +29,7 @@ import {
 import { cn } from "@/lib/utils"
 import { ApiError } from "@/lib/api"
 import type { Agendamento } from "@/types"
+import type { FinanceiroInput } from "@/components/agenda/AgendamentoFinanceiroSection"
 
 type Visao = "mensal" | "semanal" | "diaria"
 
@@ -45,7 +40,8 @@ const VISOES: { valor: Visao; label: string }[] = [
 ]
 
 export function AgendaPage() {
-  const { ehDono } = useAuth()
+  const { ehDono, estabelecimento } = useAuth()
+  const segmento = estabelecimento?.segmento ?? "geral"
   const hoje = dataDeHoje()
   const hojeISO = paraISODate(hoje.ano, hoje.mes, hoje.dia)
 
@@ -60,7 +56,9 @@ export function AgendaPage() {
   const [novoAberto, setNovoAberto] = useState(false)
   const [meuHorarioAberto, setMeuHorarioAberto] = useState(false)
   const [reagendarAberto, setReagendarAberto] = useState(false)
-  const [profissionalFiltro, setProfissionalFiltro] = useState<number | null>(null)
+  // vazio = toda a equipe (sem filtro) — multi-seleção, ver CLAUDE.md
+  // "Multi-seleção de profissional".
+  const [profissionalFiltro, setProfissionalFiltro] = useState<number[]>([])
 
   const semanas = useMemo(() => gerarGradeMensal(ano, mes), [ano, mes])
   const diasSemana = useMemo(() => gerarSemana(dataReferencia), [dataReferencia])
@@ -72,11 +70,16 @@ export function AgendaPage() {
   }, [visao, semanas, diasSemana, dataReferencia])
 
   const { equipe } = useEquipe(ehDono)
-  const { agendamentos, loading, cancelar, criar, atualizarPago, reagendar } = useAgendamentos(
-    inicio,
-    fim,
-    profissionalFiltro
-  )
+  const {
+    agendamentos,
+    loading,
+    cancelar,
+    criar,
+    atualizarPago,
+    reagendar,
+    atualizarFinanceiro,
+    concluir,
+  } = useAgendamentos(inicio, fim, profissionalFiltro)
   const { servicos } = useServicos()
   const profissionais = equipe?.profissionais ?? []
 
@@ -148,6 +151,15 @@ export function AgendaPage() {
     }
   }
 
+  // erro tratado dentro do próprio AgendamentoFinanceiroSection (mostra o
+  // toast e mantém o painel aberto pra tentar de novo) — aqui só propaga e
+  // sincroniza o painel de detalhe com a resposta.
+  async function handleAtualizarFinanceiro(id: number, dados: FinanceiroInput) {
+    const atualizado = await atualizarFinanceiro(id, dados)
+    setAgendamentoSelecionado(atualizado)
+    return atualizado
+  }
+
   // erros (incl. 409 de conflito) são tratados dentro do próprio
   // ReagendarDialog — aqui só propaga e atualiza o painel de detalhe com o
   // novo horário quando dá certo.
@@ -155,6 +167,16 @@ export function AgendaPage() {
     const atualizado = await reagendar(id, data, hora, encaixe)
     setAgendamentoSelecionado(atualizado)
     return atualizado
+  }
+
+  async function handleConcluir(id: number) {
+    try {
+      const atualizado = await concluir(id)
+      setAgendamentoSelecionado(atualizado)
+      toast.success("Agendamento concluído.")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Erro ao concluir agendamento")
+    }
   }
 
   const titulo =
@@ -193,27 +215,11 @@ export function AgendaPage() {
           </div>
 
           {ehDono && profissionais.length > 1 && (
-            <Select
-              value={profissionalFiltro ? String(profissionalFiltro) : "todos"}
-              onValueChange={(v) => setProfissionalFiltro(v === "todos" ? null : Number(v))}
-            >
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Toda a equipe">
-                  {(value: string | null) => {
-                    if (!value || value === "todos") return "Toda a equipe"
-                    return profissionais.find((p) => String(p.id) === value)?.nome ?? null
-                  }}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Toda a equipe</SelectItem>
-                {profissionais.map((p) => (
-                  <SelectItem key={p.id} value={String(p.id)}>
-                    {p.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FiltroProfissionalMultiSelect
+              profissionais={profissionais}
+              selecionados={profissionalFiltro}
+              onChange={setProfissionalFiltro}
+            />
           )}
           {!ehDono && (
             <Button variant="outline" size="sm" onClick={() => setMeuHorarioAberto(true)}>
@@ -263,9 +269,12 @@ export function AgendaPage() {
 
       <AgendamentoDetailPanel
         agendamento={agendamentoSelecionado}
+        segmento={segmento}
         onOpenChange={(open) => !open && setAgendamentoSelecionado(null)}
         onCancelar={handleCancelar}
         onAtualizarPago={handleAtualizarPago}
+        onAtualizarFinanceiro={handleAtualizarFinanceiro}
+        onConcluir={handleConcluir}
         onReagendarClick={() => setReagendarAberto(true)}
       />
 
@@ -281,6 +290,7 @@ export function AgendaPage() {
         onOpenChange={setNovoAberto}
         servicos={servicos}
         profissionais={profissionais}
+        segmento={segmento}
         onCriar={criar}
       />
 

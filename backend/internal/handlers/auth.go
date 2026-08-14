@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,10 +19,14 @@ import (
 type AuthHandler struct {
 	DB          *gorm.DB
 	Gerenciador *auth.Gerenciador
+	// Pagamento gera o link de cobrança InfinitePay no cadastro (ver
+	// "Cadastro e ativação de novos estabelecimentos" no CLAUDE.md). Pode
+	// ficar nil em testes/cenários que não precisam disso.
+	Pagamento *PagamentoHandler
 }
 
-func NewAuthHandler(db *gorm.DB, gerenciador *auth.Gerenciador) *AuthHandler {
-	return &AuthHandler{DB: db, Gerenciador: gerenciador}
+func NewAuthHandler(db *gorm.DB, gerenciador *auth.Gerenciador, pagamento *PagamentoHandler) *AuthHandler {
+	return &AuthHandler{DB: db, Gerenciador: gerenciador, Pagamento: pagamento}
 }
 
 type sessaoResponse struct {
@@ -42,13 +47,15 @@ type registroInput struct {
 // primeiro usuário dela. Cada empresa na plataforma nasce por aqui — não
 // existe mais um estabelecimento único criado automaticamente no boot.
 //
-// Todo cadastro nasce com Ativo=false (cobrança manual via Pix — ver
-// CLAUDE.md "Cadastro e ativação de novos estabelecimentos"): o frontend
-// manda o dono pra tela de instrução de pagamento em vez do onboarding
-// normal, e ExigirEstabelecimentoAtivo bloqueia qualquer rota admin até a
-// ativação manual no banco. Exceção: e-mail cadastrado em EmailIsento (ver
-// "Isenção de pagamento") nasce direto com Ativo=true e Isento=true,
-// pulando a tela de pagamento inteira.
+// Todo cadastro nasce com Ativo=false (cobrança automática via InfinitePay —
+// ver CLAUDE.md "Cadastro e ativação de novos estabelecimentos"): logo
+// depois de criar o registro, gera um link de pagamento único (order_nsu =
+// ID do estabelecimento) e manda o frontend pra tela de instrução de
+// pagamento em vez do onboarding normal. ExigirEstabelecimentoAtivo bloqueia
+// qualquer rota admin até o webhook (ou o botão "já paguei, verificar")
+// confirmar o pagamento e ativar sozinho. Exceção: e-mail cadastrado em
+// EmailIsento (ver "Isenção de pagamento") nasce direto com Ativo=true e
+// Isento=true, pulando a cobrança inteira.
 func (h *AuthHandler) Registro(c *gin.Context) {
 	var input registroInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -137,6 +144,11 @@ func (h *AuthHandler) Registro(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao criar conta"})
 		return
+	}
+
+	if !isento && h.Pagamento != nil {
+		orderNsu := strconv.FormatUint(uint64(estabelecimento.ID), 10)
+		h.Pagamento.GerarLinkPagamento(&estabelecimento, orderNsu)
 	}
 
 	token, err := h.Gerenciador.GerarToken(usuario.ID, estabelecimento.ID, usuario.Papel)

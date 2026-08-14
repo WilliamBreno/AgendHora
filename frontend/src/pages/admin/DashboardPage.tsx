@@ -3,11 +3,14 @@ import { ChevronDown, Download, FileSpreadsheet, FileText } from "lucide-react"
 import gsap from "gsap"
 import { toast } from "sonner"
 import { useDashboard } from "@/hooks/useDashboard"
+import { useEquipe } from "@/hooks/useEquipe"
+import { useAuth } from "@/contexts/AuthContext"
 import { MetricaCard } from "@/components/dashboard/MetricaCard"
 import { GraficoFaturamento } from "@/components/dashboard/GraficoFaturamento"
 import { RankingServicos } from "@/components/dashboard/RankingServicos"
 import { SugestoesCards } from "@/components/dashboard/SugestoesCards"
 import { Button } from "@/components/ui/button"
+import { FiltroProfissionalMultiSelect } from "@/components/common/FiltroProfissionalMultiSelect"
 import {
   Select,
   SelectContent,
@@ -39,7 +42,14 @@ const FORMATO_CONFIG: Record<FormatoExportacao, { label: string; icone: typeof D
 }
 
 export function DashboardPage() {
-  const { dashboard, loading } = useDashboard()
+  const { ehDono } = useAuth()
+  // vazio = toda a equipe (sem filtro) — multi-seleção, ver CLAUDE.md
+  // "Multi-seleção de profissional". Só o dono vê o controle; um auxiliar
+  // não escolhe ver outros profissionais.
+  const [profissionalFiltro, setProfissionalFiltro] = useState<number[]>([])
+  const { equipe } = useEquipe(ehDono)
+  const profissionais = equipe?.profissionais ?? []
+  const { dashboard, loading } = useDashboard(profissionalFiltro)
   const containerRef = useRef<HTMLDivElement>(null)
   const [periodoExportar, setPeriodoExportar] = useState<Periodo>("mes")
   const [exportando, setExportando] = useState(false)
@@ -47,8 +57,9 @@ export function DashboardPage() {
   async function handleExportar(formato: FormatoExportacao) {
     setExportando(true)
     try {
+      const filtro = profissionalFiltro.map((id) => `&profissional_id=${id}`).join("")
       await baixarArquivoAdmin(
-        `/dashboard/${formato}?periodo=${periodoExportar}`,
+        `/dashboard/${formato}?periodo=${periodoExportar}${filtro}`,
         `agendamentos-${periodoExportar}.${formato}`
       )
     } catch (err) {
@@ -76,7 +87,14 @@ export function DashboardPage() {
           <h1 className="font-heading text-2xl font-semibold">Dashboard</h1>
           <p className="text-sm text-muted-foreground">Visão geral do seu estabelecimento.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {ehDono && profissionais.length > 1 && (
+            <FiltroProfissionalMultiSelect
+              profissionais={profissionais}
+              selecionados={profissionalFiltro}
+              onChange={setProfissionalFiltro}
+            />
+          )}
           <Select value={periodoExportar} onValueChange={(v) => setPeriodoExportar(v as Periodo)}>
             <SelectTrigger className="w-36">
               <SelectValue placeholder="Esse mês">

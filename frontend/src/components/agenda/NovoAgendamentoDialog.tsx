@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react"
+import { ChevronDown } from "lucide-react"
 import { toast } from "sonner"
 import {
   Dialog,
@@ -23,13 +24,18 @@ import {
 } from "@/components/ui/select"
 import { useAuth } from "@/contexts/AuthContext"
 import { ApiError } from "@/lib/api"
-import type { AgendamentoInput, Servico, Usuario } from "@/types"
+import { cn } from "@/lib/utils"
+import type { AgendamentoInput, ConflitoAgendamento, Servico, Usuario } from "@/types"
 
 interface NovoAgendamentoDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   servicos: Servico[]
   profissionais: Usuario[]
+  // segmento do estabelecimento (ver CLAUDE.md "Segmentos de negócio") —
+  // "tatuagem" mostra sinal + link de referência já em destaque, em vez de
+  // atrás de "mais opções".
+  segmento: string
   onCriar: (input: AgendamentoInput) => Promise<unknown>
 }
 
@@ -41,6 +47,10 @@ const FORM_VAZIO: AgendamentoInput = {
   data: "",
   hora: "",
   observacoes: "",
+  link_referencia: "",
+  valor_final: null,
+  valor_sinal: null,
+  sinal_pago: false,
 }
 
 export function NovoAgendamentoDialog({
@@ -48,8 +58,11 @@ export function NovoAgendamentoDialog({
   onOpenChange,
   servicos,
   profissionais,
+  segmento,
   onCriar,
 }: NovoAgendamentoDialogProps) {
+  const destaqueFinanceiro = segmento === "tatuagem"
+  const [maisOpcoesAberto, setMaisOpcoesAberto] = useState(destaqueFinanceiro)
   const { usuario } = useAuth()
   // só mostra o seletor quando há de fato uma escolha (dono com equipe); com
   // um profissional só, o agendamento vai automaticamente pra ele.
@@ -59,14 +72,16 @@ export function NovoAgendamentoDialog({
   const [form, setForm] = useState<AgendamentoInput>(FORM_VAZIO)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
-  // true quando a última tentativa esbarrou num horário já ocupado — em vez
-  // de só bloquear, oferece a opção de encaixar mesmo assim ou escolher outro horário.
-  const [conflito, setConflito] = useState(false)
+  // preenchido quando a última tentativa esbarrou num horário já ocupado —
+  // em vez de só bloquear, mostra com quem/o quê e oferece a opção de
+  // encaixar mesmo assim ou escolher outro horário.
+  const [conflito, setConflito] = useState<ConflitoAgendamento | null>(null)
 
   function resetar() {
     setForm({ ...FORM_VAZIO, profissional_id: exigeEscolhaProfissional ? 0 : profissionalUnico })
     setErro(null)
-    setConflito(false)
+    setConflito(null)
+    setMaisOpcoesAberto(destaqueFinanceiro)
   }
 
   useEffect(() => {
@@ -78,7 +93,7 @@ export function NovoAgendamentoDialog({
     setForm((f) => ({ ...f, [campo]: valor }))
     // qualquer edição invalida a decisão de conflito anterior (pode ter sido
     // sobre outro horário/serviço)
-    setConflito(false)
+    setConflito(null)
     setErro(null)
   }
 
@@ -92,7 +107,9 @@ export function NovoAgendamentoDialog({
       onOpenChange(false)
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        setConflito(true)
+        const corpo = err.body as { conflito?: ConflitoAgendamento } | null
+        setConflito(corpo?.conflito ?? null)
+        if (!corpo?.conflito) setErro(err.message)
       } else {
         setErro(err instanceof ApiError ? err.message : "Não foi possível criar o agendamento.")
       }
@@ -103,7 +120,7 @@ export function NovoAgendamentoDialog({
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    setConflito(false)
+    setConflito(null)
 
     if (!form.cliente_nome.trim() || !form.cliente_telefone.trim()) {
       setErro("Informe o nome e o telefone do cliente.")
@@ -242,17 +259,93 @@ export function NovoAgendamentoDialog({
               />
             </div>
 
+            <div className={cn("rounded-lg border border-border", destaqueFinanceiro && "border-primary/30 bg-primary/[0.03]")}>
+              <button
+                type="button"
+                onClick={() => setMaisOpcoesAberto((a) => !a)}
+                className="flex w-full items-center justify-between px-3 py-2 text-sm font-medium"
+              >
+                <span>Valor final, sinal e referência</span>
+                <ChevronDown
+                  className={cn("size-4 text-muted-foreground transition-transform", maisOpcoesAberto && "rotate-180")}
+                />
+              </button>
+
+              {maisOpcoesAberto && (
+                <div className="flex flex-col gap-3 border-t border-border p-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="valor_final" className="text-xs">
+                        Valor final (R$)
+                      </Label>
+                      <Input
+                        id="valor_final"
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={form.valor_final ?? ""}
+                        placeholder="Preço do serviço"
+                        onChange={(e) =>
+                          atualizarCampo("valor_final", e.target.value === "" ? null : Number(e.target.value))
+                        }
+                      />
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="valor_sinal" className="text-xs">
+                        Sinal (R$)
+                      </Label>
+                      <Input
+                        id="valor_sinal"
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={form.valor_sinal ?? ""}
+                        placeholder="0,00"
+                        onChange={(e) =>
+                          atualizarCampo("valor_sinal", e.target.value === "" ? null : Number(e.target.value))
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={form.sinal_pago ?? false}
+                      disabled={!form.valor_sinal}
+                      onChange={(e) => atualizarCampo("sinal_pago", e.target.checked)}
+                      className="size-4 rounded border-input accent-primary"
+                    />
+                    Sinal já foi pago
+                  </label>
+
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="link_referencia" className="text-xs">
+                      Link de referência
+                    </Label>
+                    <Input
+                      id="link_referencia"
+                      value={form.link_referencia}
+                      onChange={(e) => atualizarCampo("link_referencia", e.target.value)}
+                      placeholder="https://..."
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             {conflito && (
               <div className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950">
                 <p className="text-amber-900 dark:text-amber-200">
-                  Esse horário já está ocupado por outro agendamento. Encaixar mesmo assim?
+                  Esse horário conflita com {conflito.cliente_nome} — {conflito.servico_nome},{" "}
+                  {conflito.inicio}–{conflito.fim}. Confirmar mesmo assim?
                 </p>
                 <div className="flex justify-end gap-2">
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => setConflito(false)}
+                    onClick={() => setConflito(null)}
                   >
                     Escolher outro horário
                   </Button>

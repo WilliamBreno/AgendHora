@@ -23,14 +23,22 @@ func NewServicoHandler(db *gorm.DB) *ServicoHandler {
 }
 
 type servicoInput struct {
-	Nome         string  `json:"nome" binding:"required"`
-	Preco        float64 `json:"preco" binding:"required,gt=0"`
-	PrecoAPartir bool    `json:"preco_a_partir"`
-	DuracaoMin   int     `json:"duracao_min" binding:"required,gt=0"`
-	Descricao    string  `json:"descricao"`
-	Cor          string  `json:"cor" binding:"required"`
-	Icone        string  `json:"icone"`
-	Foto         string  `json:"foto"`
+	Nome  string   `json:"nome" binding:"required"`
+	Preco *float64 `json:"preco"` // nil = sem preço cadastrado ("a combinar" na página pública)
+	// PrecoAPartir só faz sentido com Preco preenchido — ignorado pelo
+	// handler quando Preco é nil.
+	PrecoAPartir bool   `json:"preco_a_partir"`
+	DuracaoMin   int    `json:"duracao_min" binding:"required,gt=0"`
+	Descricao    string `json:"descricao"`
+	Cor          string `json:"cor" binding:"required"`
+	Icone        string `json:"icone"`
+	Foto         string `json:"foto"`
+}
+
+// validarPreco só existe pra rejeitar um preço explicitamente inválido
+// (negativo ou zero) quando informado — nil (sem preço) é sempre válido.
+func validarPreco(preco *float64) bool {
+	return preco == nil || *preco > 0
 }
 
 func validarCor(cor string) bool {
@@ -81,6 +89,10 @@ func (h *ServicoHandler) Create(c *gin.Context) {
 		return
 	}
 	if !validarImagemBase64(c, input.Foto) {
+		return
+	}
+	if !validarPreco(input.Preco) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "preço precisa ser maior que zero"})
 		return
 	}
 
@@ -150,6 +162,10 @@ func (h *ServicoHandler) Update(c *gin.Context) {
 		return
 	}
 	if !validarImagemBase64(c, input.Foto) {
+		return
+	}
+	if !validarPreco(input.Preco) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "preço precisa ser maior que zero"})
 		return
 	}
 

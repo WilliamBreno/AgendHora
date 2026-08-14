@@ -55,6 +55,32 @@ type Agendamento struct {
 	Profissional      Usuario `json:"profissional,omitempty"`
 	EstabelecimentoID uint    `gorm:"not null;index" json:"estabelecimento_id"`
 
+	// ValorFinal (opcional) sobrescreve o preço do serviço no cálculo de
+	// faturamento/dashboard quando preenchido — útil pra qualquer
+	// estabelecimento (desconto negociado, serviço com adicional), não só
+	// quem usa segmento "tatuagem" (ver CLAUDE.md "Segmentos de negócio").
+	// Só editável pelo admin, nunca pelo formulário público.
+	ValorFinal *float64 `json:"valor_final"`
+	// ValorSinal + SinalPago são o depósito antecipado — mais comum em
+	// segmentos como tatuagem, mas disponíveis pra qualquer estabelecimento.
+	// Só editáveis pelo admin.
+	ValorSinal *float64 `json:"valor_sinal"`
+	SinalPago  bool     `gorm:"not null;default:false" json:"sinal_pago"`
+	// LinkReferencia é um link de texto simples que o próprio cliente cola
+	// no formulário público (ex: imagem de referência hospedada em outro
+	// lugar) — não é upload de arquivo nesta v1. O admin também pode
+	// editar/completar depois pelo painel de detalhe.
+	LinkReferencia string `json:"link_referencia"`
+
+	// ConcluidoEm registra quando o atendimento terminou de verdade (botão
+	// "Concluir agora" no painel de detalhe) — nulo até então. Quando
+	// preenchido e anterior ao fim oficial (Hora + Servico.DuracaoMin), o
+	// motor de disponibilidade do admin considera o resto do horário livre
+	// de verdade em vez de esperar o fim oficial (ver CLAUDE.md "Encaixe de
+	// horários"). A página pública nunca leva isso em conta — continua
+	// sempre conservadora.
+	ConcluidoEm *time.Time `json:"concluido_em"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

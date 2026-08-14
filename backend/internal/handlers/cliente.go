@@ -21,36 +21,56 @@ func NewClienteHandler(db *gorm.DB) *ClienteHandler {
 	return &ClienteHandler{DB: db}
 }
 
+// DiasClienteSumido é o padrão de 60 dias sem agendar pra um cliente
+// aparecer sinalizado como "sumido" (ver CLAUDE.md "Clientes").
+const DiasClienteSumido = 60
+
 type clienteResponse struct {
-	ID                uint    `json:"id"`
-	Nome              string  `json:"nome"`
-	Telefone          string  `json:"telefone"`
-	Email             string  `json:"email"`
-	DataNascimento    *string `json:"data_nascimento"`
-	AgendamentosCount int64   `json:"agendamentos_count"`
-	CreatedAt         string  `json:"created_at"`
+	ID                  uint    `json:"id"`
+	Nome                string  `json:"nome"`
+	Telefone            string  `json:"telefone"`
+	Email               string  `json:"email"`
+	DataNascimento      *string `json:"data_nascimento"`
+	AgendamentosCount   int64   `json:"agendamentos_count"`
+	UltimoAgendamentoEm *string `json:"ultimo_agendamento_em"`
+	// Sumido é calculado a partir do último agendamento confirmado — nunca
+	// aparece pra quem nunca agendou (nada pra comparar), só pra quem já
+	// agendou alguma vez e sumiu há mais de DiasClienteSumido dias.
+	Sumido    bool   `json:"sumido"`
+	CreatedAt string `json:"created_at"`
 }
 
-func toClienteResponse(c models.Cliente, agendamentosCount int64) clienteResponse {
+func toClienteResponse(c models.Cliente, agendamentosCount int64, ultimoAgendamento *time.Time) clienteResponse {
 	var dataNascimento *string
 	if c.DataNascimento != nil {
 		f := c.DataNascimento.Format("2006-01-02")
 		dataNascimento = &f
 	}
+	var ultimoAgendamentoStr *string
+	sumido := false
+	if ultimoAgendamento != nil {
+		f := ultimoAgendamento.Format("2006-01-02")
+		ultimoAgendamentoStr = &f
+		sumido = time.Since(*ultimoAgendamento) > DiasClienteSumido*24*time.Hour
+	}
 	return clienteResponse{
-		ID:                c.ID,
-		Nome:              c.Nome,
-		Telefone:          c.Telefone,
-		Email:             c.Email,
-		DataNascimento:    dataNascimento,
-		AgendamentosCount: agendamentosCount,
-		CreatedAt:         c.CreatedAt.Format(time.RFC3339),
+		ID:                  c.ID,
+		Nome:                c.Nome,
+		Telefone:            c.Telefone,
+		Email:               c.Email,
+		DataNascimento:      dataNascimento,
+		AgendamentosCount:   agendamentosCount,
+		UltimoAgendamentoEm: ultimoAgendamentoStr,
+		Sumido:              sumido,
+		CreatedAt:           c.CreatedAt.Format(time.RFC3339),
 	}
 }
 
 // List retorna os clientes do estabelecimento, com quantos agendamentos
 // cada um já fez. aniversariantes=mes|semana filtra só quem faz aniversário
 // no período — compara só dia/mês de data_nascimento, ignorando o ano.
+// sumidos=true filtra só quem já agendou alguma vez mas não agenda há mais
+// de DiasClienteSumido dias (ver CLAUDE.md "Clientes").
 func (h *ClienteHandler) List(c *gin.Context) {
 	estabelecimentoID := auth.EstabelecimentoID(c)
 
@@ -89,14 +109,16 @@ func (h *ClienteHandler) List(c *gin.Context) {
 		return
 	}
 
-	// conta agendamentos de todo mundo numa query só, em vez de uma por cliente
+	// conta agendamentos e acha a data do último de todo mundo numa query só
+	// cada, em vez de uma por cliente.
 	contagem := map[uint]int64{}
+	ultimoAgendamento := map[uint]time.Time{}
 	if len(clientes) > 0 {
 		ids := make([]uint, len(clientes))
 		for i, cl := range clientes {
 			ids[i] = cl.ID
 		}
-		var linhas []struct {
+		var linhasContagem []struct {
 			ClienteID uint
 			Total     int64
 		}
@@ -104,15 +126,37 @@ func (h *ClienteHandler) List(c *gin.Context) {
 			Select("cliente_id, count(*) as total").
 			Where("cliente_id IN ?", ids).
 			Group("cliente_id").
-			Scan(&linhas)
-		for _, l := range linhas {
+			Scan(&linhasContagem)
+		for _, l := range linhasContagem {
 			contagem[l.ClienteID] = l.Total
+		}
+
+		var linhasUltimo []struct {
+			ClienteID uint
+			Ultima    time.Time
+		}
+		h.DB.Model(&models.Agendamento{}).
+			Select("cliente_id, MAX(data) as ultima").
+			Where("cliente_id IN ? AND status = ?", ids, models.StatusConfirmado).
+			Group("cliente_id").
+			Scan(&linhasUltimo)
+		for _, l := range linhasUltimo {
+			ultimoAgendamento[l.ClienteID] = l.Ultima
 		}
 	}
 
+	apenasSumidos := c.Query("sumidos") == "true"
 	respostas := make([]clienteResponse, 0, len(clientes))
 	for _, cl := range clientes {
-		respostas = append(respostas, toClienteResponse(cl, contagem[cl.ID]))
+		var ultima *time.Time
+		if t, ok := ultimoAgendamento[cl.ID]; ok {
+			ultima = &t
+		}
+		resposta := toClienteResponse(cl, contagem[cl.ID], ultima)
+		if apenasSumidos && !resposta.Sumido {
+			continue
+		}
+		respostas = append(respostas, resposta)
 	}
 	c.JSON(http.StatusOK, respostas)
 }
@@ -173,7 +217,7 @@ func (h *ClienteHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao cadastrar cliente"})
 		return
 	}
-	c.JSON(http.StatusCreated, toClienteResponse(cliente, 0))
+	c.JSON(http.StatusCreated, toClienteResponse(cliente, 0, nil))
 }
 
 // Update edita nome/telefone/data de nascimento — não mexe no telefone de
@@ -225,5 +269,14 @@ func (h *ClienteHandler) Update(c *gin.Context) {
 
 	var totalAgendamentos int64
 	h.DB.Model(&models.Agendamento{}).Where("cliente_id = ?", cliente.ID).Count(&totalAgendamentos)
-	c.JSON(http.StatusOK, toClienteResponse(cliente, totalAgendamentos))
+
+	var ultima *time.Time
+	var ultimoAgendamento models.Agendamento
+	err = h.DB.Where("cliente_id = ? AND status = ?", cliente.ID, models.StatusConfirmado).
+		Order("data desc").First(&ultimoAgendamento).Error
+	if err == nil {
+		ultima = &ultimoAgendamento.Data
+	}
+
+	c.JSON(http.StatusOK, toClienteResponse(cliente, totalAgendamentos, ultima))
 }

@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { HorarioSelecao } from "@/components/public/HorarioSelecao"
 import { useDisponibilidadeAdmin } from "@/hooks/useDisponibilidadeAdmin"
 import { ApiError } from "@/lib/api"
-import type { Agendamento } from "@/types"
+import type { Agendamento, ConflitoAgendamento } from "@/types"
 
 interface ReagendarDialogProps {
   open: boolean
@@ -34,7 +34,7 @@ export function ReagendarDialog({
   const [hora, setHora] = useState("")
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
-  const [conflito, setConflito] = useState(false)
+  const [conflito, setConflito] = useState<ConflitoAgendamento | null>(null)
 
   const { horarios, loading } = useDisponibilidadeAdmin(
     agendamento?.servico_id ?? null,
@@ -47,7 +47,7 @@ export function ReagendarDialog({
       setData("")
       setHora("")
       setErro(null)
-      setConflito(false)
+      setConflito(null)
     }
   }, [open, agendamento?.id])
 
@@ -61,7 +61,9 @@ export function ReagendarDialog({
       onOpenChange(false)
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        setConflito(true)
+        const corpo = err.body as { conflito?: ConflitoAgendamento } | null
+        setConflito(corpo?.conflito ?? null)
+        if (!corpo?.conflito) setErro(err.message)
       } else {
         setErro(err instanceof ApiError ? err.message : "Não foi possível reagendar.")
       }
@@ -91,7 +93,7 @@ export function ReagendarDialog({
             onDataChange={setData}
             onHoraChange={(novaHora) => {
               setHora(novaHora)
-              setConflito(false)
+              setConflito(null)
               setErro(null)
             }}
           />
@@ -99,10 +101,11 @@ export function ReagendarDialog({
           {conflito && (
             <div className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950">
               <p className="text-amber-900 dark:text-amber-200">
-                Esse horário já está ocupado por outro agendamento. Encaixar mesmo assim?
+                Esse horário conflita com {conflito.cliente_nome} — {conflito.servico_nome},{" "}
+                {conflito.inicio}–{conflito.fim}. Confirmar mesmo assim?
               </p>
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => setConflito(false)}>
+                <Button type="button" variant="outline" size="sm" onClick={() => setConflito(null)}>
                   Escolher outro horário
                 </Button>
                 <Button type="button" size="sm" disabled={salvando} onClick={() => submeter(true)}>

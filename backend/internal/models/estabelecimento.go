@@ -83,6 +83,45 @@ type Estabelecimento struct {
 	// (login, sessão aberta, página pública).
 	IsentoAte *time.Time `json:"isento_ate"`
 
+	// ProximoVencimento é sempre `data do último pagamento + 30 dias` (nunca
+	// uma data fixa de calendário — ver CLAUDE.md "Renovação mensal") —
+	// atualizado a cada pagamento confirmado, inicial ou renovação (ver
+	// handlers.ativarPagamento). Nil pra quem é isento ou pra contas ativas
+	// anteriores a essa feature que nunca passaram pelo fluxo de pagamento —
+	// a rotina diária de renovação ignora quem tem esse campo nil, pra não
+	// desativar retroativamente ninguém.
+	ProximoVencimento *time.Time `json:"proximo_vencimento"`
+
+	// UltimoResumoSemanalEm marca quando o último resumo semanal por e-mail
+	// (ver internal/resumosemanal) foi enviado — evita reenviar no mesmo dia
+	// se o processo reiniciar, sem precisar de nenhum estado além desse
+	// timestamp.
+	UltimoResumoSemanalEm *time.Time `json:"-"`
+
+	// LinkPagamentoURL é o link de pagamento único (InfinitePay Checkout
+	// Integrado) gerado pro ciclo de cobrança atual — mostrado na tela
+	// pós-cadastro e, na renovação mensal, na tela "Meu Plano". Vazio quando
+	// isento, ou quando ainda não foi gerado (ex: INFINITEPAY_HANDLE não
+	// configurado — ver internal/infinitepay).
+	LinkPagamentoURL string `json:"link_pagamento_url"`
+	// Segmento controla o que aparece em destaque nas telas (ex: "tatuagem"
+	// mostra sinal + link de referência em destaque no painel do agendamento)
+	// — nunca lógica de backend separada por tipo de negócio, os campos que
+	// ele afeta (Servico.Preco opcional, Agendamento.ValorFinal/ValorSinal/
+	// SinalPago/LinkReferencia) já são genéricos e valem pra qualquer
+	// estabelecimento. Trocado direto no banco pelo dono do projeto — não é
+	// self-service do dono do estabelecimento nesta v1 (ver CLAUDE.md
+	// "Segmentos de negócio").
+	Segmento string `gorm:"not null;default:geral" json:"segmento"`
+
+	// LinkPagamentoOrderNsu é o order_nsu enviado à InfinitePay nesse link —
+	// é como o webhook e o botão "já paguei, verificar" acham de volta qual
+	// Estabelecimento pagou (ver handlers.PagamentoHandler). No cadastro
+	// inicial é o próprio ID do estabelecimento; muda a cada ciclo de
+	// renovação. Fica vazio de novo assim que o pagamento é confirmado —
+	// um link já usado não deve mais bater com nenhum webhook novo.
+	LinkPagamentoOrderNsu string `gorm:"index" json:"-"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

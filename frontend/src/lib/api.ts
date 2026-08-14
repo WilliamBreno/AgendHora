@@ -16,10 +16,15 @@ export function clearToken() {
 
 export class ApiError extends Error {
   status: number
+  // corpo bruto da resposta de erro — usado quando o backend manda dados
+  // extras além da mensagem (ex: "conflito" no 409 de horário ocupado, ver
+  // CLAUDE.md "Encaixe de horários").
+  body: unknown
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, body?: unknown) {
     super(message)
     this.status = status
+    this.body = body
   }
 }
 
@@ -40,7 +45,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const message = body?.error ?? `Erro ${response.status} ao chamar a API`
-    throw new ApiError(message, response.status)
+    throw new ApiError(message, response.status, body)
   }
 
   return body as T
@@ -200,6 +205,22 @@ export function apiPublico(slug: string) {
     patch: <T>(path: string, data?: unknown) =>
       request<T>(`${base}${path}`, {
         method: "PATCH",
+        body: data !== undefined ? JSON.stringify(data) : undefined,
+      }),
+  }
+}
+
+// apiPagamento: tela pós-cadastro (ver CLAUDE.md "Cadastro e ativação de
+// novos estabelecimentos") — sem login, de propósito: é exatamente enquanto
+// o estabelecimento está inativo (sem sessão utilizável) que ela precisa
+// funcionar. Identifica a empresa pelo slug, igual apiPublico.
+export function apiPagamento(slug: string) {
+  const base = `/api/pagamento/${slug}`
+  return {
+    get: <T>() => request<T>(base),
+    post: <T>(path: string, data?: unknown) =>
+      request<T>(`${base}${path}`, {
+        method: "POST",
         body: data !== undefined ? JSON.stringify(data) : undefined,
       }),
   }

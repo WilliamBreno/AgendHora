@@ -13,14 +13,27 @@ import { DynamicIcon } from "@/lib/icons"
 import { CORES_SERVICO_CLASSES } from "@/lib/cores"
 import { cn } from "@/lib/utils"
 import { formatarDataExibicao, formatarPrecoServico } from "@/lib/formatacao"
+import {
+  AgendamentoFinanceiroSection,
+  type FinanceiroInput,
+} from "@/components/agenda/AgendamentoFinanceiroSection"
 import type { Agendamento, StatusAgendamento } from "@/types"
 
 interface AgendamentoDetailPanelProps {
   agendamento: Agendamento | null
+  // segmento do estabelecimento (ver CLAUDE.md "Segmentos de negócio") —
+  // "tatuagem" abre a seção de valor final/sinal/referência já em destaque.
+  segmento: string
   onOpenChange: (open: boolean) => void
   onCancelar: (id: number) => Promise<void>
   onAtualizarPago: (id: number, pago: boolean) => Promise<void>
+  onAtualizarFinanceiro: (id: number, dados: FinanceiroInput) => Promise<Agendamento>
+  onConcluir: (id: number) => Promise<void>
   onReagendarClick: () => void
+}
+
+function formatarHoraConclusao(iso: string) {
+  return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
 }
 
 const STATUS_LABEL: Record<StatusAgendamento, string> = {
@@ -31,13 +44,17 @@ const STATUS_LABEL: Record<StatusAgendamento, string> = {
 
 export function AgendamentoDetailPanel({
   agendamento,
+  segmento,
   onOpenChange,
   onCancelar,
   onAtualizarPago,
+  onAtualizarFinanceiro,
+  onConcluir,
   onReagendarClick,
 }: AgendamentoDetailPanelProps) {
   const [cancelando, setCancelando] = useState(false)
   const [salvandoPago, setSalvandoPago] = useState(false)
+  const [concluindo, setConcluindo] = useState(false)
 
   async function handleCancelar() {
     if (!agendamento) return
@@ -46,6 +63,16 @@ export function AgendamentoDetailPanel({
       await onCancelar(agendamento.id)
     } finally {
       setCancelando(false)
+    }
+  }
+
+  async function handleConcluir() {
+    if (!agendamento) return
+    setConcluindo(true)
+    try {
+      await onConcluir(agendamento.id)
+    } finally {
+      setConcluindo(false)
     }
   }
 
@@ -140,6 +167,12 @@ export function AgendamentoDetailPanel({
                   <dt className="text-muted-foreground">Status</dt>
                   <dd className="font-medium">{STATUS_LABEL[agendamento.status]}</dd>
                 </div>
+                {agendamento.concluido_em && (
+                  <div className="flex justify-between">
+                    <dt className="text-muted-foreground">Concluído às</dt>
+                    <dd className="font-medium">{formatarHoraConclusao(agendamento.concluido_em)}</dd>
+                  </div>
+                )}
               </dl>
 
               {agendamento.observacoes && (
@@ -148,11 +181,22 @@ export function AgendamentoDetailPanel({
                   <p className="text-sm">{agendamento.observacoes}</p>
                 </div>
               )}
+
+              <AgendamentoFinanceiroSection
+                agendamento={agendamento}
+                destaque={segmento === "tatuagem"}
+                onSalvar={onAtualizarFinanceiro}
+              />
             </div>
 
             <SheetFooter>
               {agendamento.status !== "cancelado" && (
                 <>
+                  {agendamento.status === "confirmado" && !agendamento.concluido_em && (
+                    <Button onClick={handleConcluir} disabled={concluindo}>
+                      {concluindo ? "Concluindo..." : "Concluir agora"}
+                    </Button>
+                  )}
                   <Button variant="outline" onClick={onReagendarClick}>
                     Reagendar
                   </Button>

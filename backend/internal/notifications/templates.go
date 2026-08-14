@@ -2,6 +2,7 @@ package notifications
 
 import (
 	"fmt"
+	"strings"
 
 	"agendamento/backend/internal/models"
 )
@@ -97,6 +98,56 @@ func emailLembreteHTML(estabelecimento models.Estabelecimento, agendamento model
 		linhaDetalhe("Horário", agendamento.Hora),
 	)
 	return envelope("Lembrete de agendamento", corpo)
+}
+
+func emailRenovacaoPendenteHTML(estabelecimento models.Estabelecimento, diasRestantes int, link string) string {
+	var mensagemPrazo string
+	switch {
+	case diasRestantes < 0:
+		mensagemPrazo = "sua assinatura do AgendHora <strong>venceu</strong> e o acesso foi pausado."
+	case diasRestantes == 0:
+		mensagemPrazo = "sua assinatura do AgendHora <strong>vence hoje</strong>."
+	case diasRestantes == 1:
+		mensagemPrazo = "sua assinatura do AgendHora <strong>vence amanhã</strong>."
+	default:
+		mensagemPrazo = fmt.Sprintf("sua assinatura do AgendHora <strong>vence em %d dias</strong>.", diasRestantes)
+	}
+
+	corpo := fmt.Sprintf(
+		`<p style="font-size:15px;margin:0 0 4px;">Olá, %s!</p>
+		<p style="font-size:15px;margin:12px 0;color:#44403c;">Passando pra avisar que %s</p>
+		<p style="font-size:15px;margin:12px 0;color:#44403c;">Pra manter sua agenda e página de agendamento funcionando sem interrupção, renove por aqui:</p>
+		<p style="margin:20px 0;"><a href="%s" style="display:inline-block;background:%s;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;">Renovar assinatura</a></p>
+		<p style="font-size:12px;color:#a8a29e;margin-top:16px;word-break:break-all;">Ou acesse: %s</p>`,
+		estabelecimento.Nome, mensagemPrazo, link, corPrimaria, link,
+	)
+	return envelope("Renovação da assinatura", corpo)
+}
+
+func formatarReaisEmail(valor float64) string {
+	return "R$ " + strings.Replace(fmt.Sprintf("%.2f", valor), ".", ",", 1)
+}
+
+func emailResumoSemanalHTML(estabelecimento models.Estabelecimento, faturamento float64, quantidade int, sugestaoTitulo, sugestaoDescricao string, temSugestao bool) string {
+	corpo := fmt.Sprintf(
+		`<p style="font-size:15px;margin:0 0 4px;">Olá! Aqui está o resumo da semana passada em <strong>%s</strong>.</p>`,
+		estabelecimento.Nome,
+	)
+	corpo += tabelaDetalhes(
+		linhaDetalhe("Faturamento", formatarReaisEmail(faturamento)),
+		linhaDetalhe("Agendamentos", fmt.Sprintf("%d", quantidade)),
+	)
+	if temSugestao {
+		corpo += fmt.Sprintf(
+			`<div style="margin-top:20px;padding:14px;background:#f5f5f4;border-radius:8px;">
+				<p style="font-size:14px;font-weight:600;margin:0 0 4px;">%s</p>
+				<p style="font-size:13px;color:#57534e;margin:0;">%s</p>
+			</div>`,
+			sugestaoTitulo, sugestaoDescricao,
+		)
+	}
+	corpo += `<p style="font-size:13px;color:#78716c;margin-top:20px;">Quer ver mais detalhes? Entre no AgendHora e confira seu dashboard completo.</p>`
+	return envelope("Resumo da semana", corpo)
 }
 
 func emailCancelamentoHTML(estabelecimento models.Estabelecimento, agendamento models.Agendamento, dataFormatada string) string {
