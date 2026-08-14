@@ -35,18 +35,18 @@ Isso não é um recomeço: o modelo de dados abaixo já guardava `estabeleciment
 - Plano único por enquanto: **R$19,90/mês**, tudo incluso (confirmado — toda a lista de funcionalidades do sistema entra nesse valor, sem trava por tier, sem comissão sobre o faturamento do estabelecimento)
 - Quando fizer sentido criar planos adicionais, a alavanca mais natural pra diferenciá-los é **quantidade de profissionais/auxiliares** (hoje sem limite) — não outras funcionalidades, já que nada da lista atual custa infraestrutura extra por cliente. Ainda não decidido quando/como; só fica registrado como o caminho mais óbvio pra quando chegar a hora
 - Posicionamento: bem abaixo dos concorrentes diretos do nicho (Trinks começa em R$65-89/mês, funcionalidade essencial só a partir de R$149-249/mês; Belezzia começa em R$199/mês) — o público-alvo é o profissional autônomo ou estabelecimento pequeno pra quem essas ferramentas são caras ou complexas demais
-- Cobrança: manual/Pix por enquanto (sem checkout automático nesta v1) — `Estabelecimento.ativo` (booleano) controla se o acesso está liberado, atualizado à mão até existir um fluxo de cobrança automática
+- **Cobrança revista**: automática via InfinitePay (Checkout Integrado) — link de pagamento único por cadastro, confirmado por webhook, ativa o Estabelecimento sozinho (ver "Cadastro e ativação de novos estabelecimentos"). Deixou de ser manual/Pix-fixo; `Estabelecimento.ativo` continua existindo, só que agora é o webhook que atualiza ele, não uma pessoa
 - **Decisão fechada sobre o bloqueio**: quando `ativo = false`, tudo fica indisponível — admin (login bloqueado, ou sessão existente expulsa) e página pública de agendamento (mostra uma mensagem simples de indisponível, não erro técnico). Isso ainda não foi implementado — é uma feature real a construir, não só o campo existir no banco
 - Planos futuros com mais funcionalidades estão previstos, mas não fazem parte do escopo agora — por isso o campo `Estabelecimento.plano` (string, hoje sempre `"padrao"`) já existe no modelo, pra não exigir migration de dado quando os outros planos forem definidos
 
 ## Modelo de dados
 
-- **Estabelecimento**: nome, `slug` (identifica a URL pública do estabelecimento), telefone, endereço (opcional), horário de funcionamento por dia da semana, `plano` (string, hoje sempre `"padrao"`), `ativo` (booleano, controla acesso enquanto a cobrança é manual), `isento` (booleano, separado de `ativo` — marca quem nunca deve ser cobrado, ver "Isenção de pagamento"), `icones_padrao`
+- **Estabelecimento**: nome, `slug` (identifica a URL pública do estabelecimento), telefone, endereço (opcional), horário de funcionamento por dia da semana, `plano` (string, hoje sempre `"padrao"`), `ativo` (booleano, controla acesso enquanto a cobrança é manual), `isento` (booleano, separado de `ativo` — marca quem nunca deve ser cobrado, ver "Isenção de pagamento"), `proximo_vencimento` (data, ver "Renovação mensal"), `segmento` (string, padrão `"geral"` — ver "Segmentos de negócio"), `icones_padrao`
 - **EmailIsento**: email (normalizado), estabelecimento_id (nulo até ser usado), criado_em — não pertence a nenhum estabelecimento, é uma lista global gerenciada só pelo dono do projeto (lista configurável de nomes de ícones lucide-react disponíveis no cadastro de serviço — ver seção "Ícones dos serviços")
 - **Usuario** (login): email, senha (hash), `papel` (`dono` | `auxiliar`), horário de trabalho, estabelecimento_id — auxiliares são convidados por e-mail e viram "profissionais" com login e agenda próprios (confirmado já implementado no código real; não criar uma tabela `Profissional` separada)
-- **Servico**: nome, preco, duracao_min, descricao, cor (chave de uma paleta fixa — ver abaixo), icone, estabelecimento_id
+- **Servico**: nome, preco (opcional — ver "Segmentos de negócio"), duracao_min, descricao, cor (chave de uma paleta fixa — ver abaixo), icone, estabelecimento_id
 - **Cliente**: nome, telefone (identifica o cliente dentro do estabelecimento), `data_nascimento` (opcional), estabelecimento_id — criado/atualizado automaticamente a cada novo agendamento, sem precisar de cadastro manual separado
-- **Agendamento**: cliente_id, servico_id, profissional_id (referencia `Usuario`, não uma tabela `Profissional` separada), data, hora, status (`pendente` | `confirmado` | `cancelado`), pago (booleano), observacoes, estabelecimento_id
+- **Agendamento**: cliente_id, servico_id, profissional_id (referencia `Usuario`, não uma tabela `Profissional` separada), data, hora, status (`pendente` | `confirmado` | `cancelado`), pago (booleano), `valor_final` (opcional, sobrescreve o preço do serviço no faturamento), `valor_sinal` (opcional) + `sinal_pago` (booleano), `link_referencia` (opcional), `concluido_em` (data/hora, opcional — ver "Encaixe de horários"), observacoes, estabelecimento_id
 - **Bloqueio**: data, hora_inicio, hora_fim (nulo = dia inteiro), motivo (opcional), profissional_id (nulo = bloqueia o estabelecimento inteiro), estabelecimento_id — usado pra folga, almoço, férias etc.; entra no mesmo cálculo de disponibilidade que já existe pros agendamentos, não é um sistema separado
 
 Como o sistema é multi-tenant, **toda consulta ao banco precisa filtrar por `estabelecimento_id`** (vindo do JWT do admin logado, ou do estabelecimento selecionado na página pública) — nunca listar ou buscar sem esse filtro. Vale considerar um middleware que injeta esse filtro automaticamente, pra não depender de lembrar disso em cada rota nova.
@@ -83,6 +83,7 @@ Dúvida resolvida: **ninguém precisa confirmar manualmente** no fluxo padrão. 
 - Login simples (email + senha, JWT)
 - **Cabeçalho da agenda**: mostra o mês e o ano (ex: "Julho de 2026"); quando o mês exibido é o mês atual, mostrar também o dia de hoje por extenso (ex: "Hoje é sexta-feira, dia 24"); cada linha da grade (semana) leva um rótulo indicando a semana do mês (Semana 1, Semana 2, Semana 3...) — hoje o protótipo só mostra mês e ano, sem esse detalhe
 - **Agenda com três visões — mensal, semanal e diária** (alternável): grade do mês (a que já existe no protótipo), navegação entre meses/semanas/dias, dia atual destacado, cada agendamento como pílula colorida (cor = cor do serviço); dias com muitos agendamentos mostram "+N mais". Semanal e diária são visões novas, reaproveitando os mesmos componentes de pílula e painel de detalhe já validados
+- **Filtro de profissional na agenda com multi-seleção** (ver vários ou todos ao mesmo tempo) — **só visível pra quem tem `papel = dono`**; um auxiliar (`papel = auxiliar`) não vê esse controle, só a própria agenda, já que não faz sentido ele escolher ver outros profissionais
 - Clicar num agendamento abre um **painel lateral** com: cliente (nome, telefone), profissional responsável, serviço, data/hora, duração, preço, status, se já está pago, observações
 - Ações no painel de detalhe: cancelar, reagendar (ver seção "Bloqueio de horários e reagendamento"), marcar como pago, e aceitar/recusar só se o modo opcional de aprovação manual estiver ativado
 - **Cadastro de serviços**: listagem em cards com barra de cor lateral; criar/editar/excluir; campos nome, preço, duração, descrição, cor (paleta fixa de 6) e ícone
@@ -91,6 +92,7 @@ Dúvida resolvida: **ninguém precisa confirmar manualmente** no fluxo padrão. 
 - **Só e-mail por enquanto (Resend)** — confirmação pro cliente assim que agenda, e aviso pro dono a cada novo agendamento. WhatsApp (whatsmeow) fica de fora deste momento por decisão do dono do projeto — ver "Decisões que não mudar sem repensar"
 
 ### 4. Dashboard (visão geral do estabelecimento)
+- **Dropdown de profissional com multi-seleção** (ver todos ou alguns) filtrando todas as métricas abaixo — mesma regra da agenda: **só visível pro dono**; auxiliar vê só os próprios números, sem esse controle
 - Cards de resumo com métricas de hoje, da semana e do mês: nº de agendamentos confirmados, faturamento (soma dos preços dos serviços agendados no período) e nº de agendamentos que ainda vão acontecer no período (hoje, na semana, no mês)
 - Gráfico de faturamento ao longo do tempo (últimos 7 e últimos 30 dias) — recharts
 - Ranking simples dos serviços mais agendados e dos que mais faturam no período
@@ -127,8 +129,21 @@ Existe um protótipo funcional em React (`agenda-estabelecimento.jsx`, entregue 
 - **Cadastro manual**: formulário simples pra adicionar ou editar um cliente direto — nome, telefone (com máscara de telefone brasileiro), data de nascimento (seletor de data de verdade, não campo de texto livre — evita data digitada errada)
 - **Importação em lote**: dois formatos, os dois funcionam igual em qualquer celular (Android ou iPhone) — CSV (planilha) e .vcf (arquivo de contatos exportado nativamente do celular). Cada linha/contato vira um `Cliente`; se o arquivo trouxer data de nascimento, importa também
 - **Aniversariantes**: filtro simples na tela de Clientes pra ver quem faz aniversário no mês (ou na semana) — usa o campo `data_nascimento`
+- **Clientes sumidos**: sinalização automática na tela de Clientes de quem não agenda há muito tempo (padrão 60 dias, calculado a partir do último agendamento) — aparece sozinho, sem o dono precisar lembrar de checar; o contato em si continua manual, mesma lógica do aniversário
 - **Envio de comunicado de aniversário é manual nesta v1** — o sistema mostra a lista e os dados de contato, mas quem manda a mensagem é o próprio dono, pelo canal que preferir; não é um disparo automático (isso juntaria duas decisões já tomadas: WhatsApp fica de fora por enquanto, e não existe motor de campanha/marketing nesta v1). Se um dia fizer sentido automatizar, é o mesmo padrão dos lembretes por e-mail — mas fica documentado como decisão consciente de não fazer agora, não esquecimento
 - "Cadastro ilimitado de clientes" do comparativo não é uma funcionalidade a construir à parte — é uma consequência de não ter nenhum limite artificial nessa tabela, o que já é o caso por padrão
+
+## Encaixe de horários
+
+Os dois caminhos discutidos (aviso ao criar manualmente, e conclusão antecipada) não são dois sistemas separados — são a mesma conta de disponibilidade, só que o segundo alimenta ela com dado real quando existe.
+
+- **`Agendamento` ganha o campo `concluido_em`** (data/hora, opcional, nulo por padrão)
+- **Botão "Concluir agora"** no painel de detalhe de qualquer agendamento confirmado (dono ou auxiliar, no próprio) — registra `concluido_em` com o horário atual
+- **A conta de "horário ocupado" de um profissional num dia passa a considerar**: se um Agendamento tem `concluido_em` preenchido e ele for antes do fim oficial (`hora + duracao`), o intervalo ocupado por aquele atendimento vira `[hora_inicio, concluido_em)` em vez do fim oficial — o resto do tempo já entra como livre de verdade
+- **Essa mesma conta é usada em dois lugares, com comportamento diferente**:
+  - **Página pública**: continua sempre conservadora e bloqueante — nunca mostra nem aceita um horário que a conta considere ocupado. Isso não muda mesmo com `concluido_em` existindo; é uma simplicidade proposital, não uma limitação técnica (evita o profissional ser encaixado no minuto seguinte a concluir algo, sem nenhuma folga)
+  - **Admin** (criar/editar agendamento manualmente): a conta é só um aviso, nunca bloqueia. Se o horário escolhido cair num intervalo que a conta considera ocupado, mostra "Esse horário conflita com [Cliente — Serviço, HH:MM–HH:MM]. Confirmar mesmo assim?" com opção de confirmar. **Se `concluido_em` já tiver sido registrado pra aquele agendamento anterior, o aviso nem aparece** — o sistema já sabe que aquele intervalo está genuinamente livre
+- Efeito prático: quem usa o botão "Concluir agora" ganha encaixes sem aviso nenhum (Caminho B); quem esquece de clicar continua funcionando do mesmo jeito de sempre, só vendo o aviso e confirmando na mão (Caminho A) — nenhum dos dois é obrigatório, o sistema funciona no primeiro dia mesmo que ninguém nunca clique em "Concluir agora"
 
 ## Bloqueio de horários e reagendamento
 
@@ -145,6 +160,7 @@ Existe um protótipo funcional em React (`agenda-estabelecimento.jsx`, entregue 
 
 - Envio de e-mail (Resend) algumas horas antes do horário marcado, lembrando o cliente do agendamento — **só e-mail por enquanto**, sem WhatsApp (ver decisão abaixo)
 - Precisa de uma tarefa agendada (cron) rodando diariamente/de hora em hora pra verificar quais agendamentos estão próximos e ainda não receberam lembrete — é a primeira peça de infraestrutura do projeto que não é só "responder a um pedido HTTP", vale planejar como um serviço/rotina separada do resto da API
+- **Resumo semanal por e-mail pro dono**: toda segunda-feira, e-mail automático com o resumo da semana anterior — faturamento, número de agendamentos, e a sugestão do dashboard daquele momento. Objetivo é o dono saber como foi a semana sem precisar abrir o sistema. Mesma infraestrutura de cron dos lembretes, só um gatilho semanal em vez de diário
 
 ## Cadastro e ativação de novos estabelecimentos
 
@@ -154,9 +170,46 @@ Estrutura de URLs proposta: `/` (marketing pública), `/cadastro` (formulário),
 
 1. **Página de marketing** (`/`): explica o produto, mostra o preço (R$19,90/mês, tudo incluso) e tem um CTA de cadastro
 2. **Cadastro** (`/cadastro`): nome do estabelecimento (gera `slug` automaticamente, checando disponibilidade), e-mail, senha, telefone — cria `Usuario` (`papel = dono`) + `Estabelecimento` com `ativo = false` por padrão
-3. **Tela pós-cadastro**: instrução de pagamento (chave Pix, valor, contato pra avisar que pagou) — sem checkout automático nesta v1, mesmo padrão manual já usado pro campo `ativo`
-4. **Ativação**: feita manualmente no banco por enquanto (poucos clientes no início); uma tela interna pra listar estabelecimentos pendentes é upgrade natural mais pra frente, não é obrigatória agora
-5. Depois de ativo, login normal no `/admin`, sem nada especial
+3. **Tela pós-cadastro**: em vez de mostrar uma chave Pix fixa, o backend chama `POST https://api.checkout.infinitepay.io/links` com o corpo:
+   ```json
+   {
+     "handle": "william-breno-santos",
+     "items": [{ "quantity": 1, "price": 1990, "description": "AgendHora - Assinatura mensal" }],
+     "order_nsu": "<identificador do estabelecimento/ciclo>",
+     "redirect_url": "<URL de volta pro AgendHora após pagar>",
+     "webhook_url": "<URL do webhook do backend>"
+   }
+   ```
+   **Atenção**: `price` é em **centavos**, não em reais — R$19,90 é `1990`. A resposta traz o link de checkout, mostrado nessa tela pra pessoa pagar (Pix, grátis, ou cartão)
+4. **Ativação automática via webhook**: a InfinitePay chama `webhook_url` (a rota `POST /webhooks/infinitepay` do backend, pública) quando o pagamento é aprovado, com `order_nsu` no corpo. **Responder em menos de 1 segundo** com `200 OK` (sucesso) — responder `400 Bad Request` faz a InfinitePay tentar reenviar. O backend acha o Estabelecimento pelo `order_nsu` e marca `ativo = true` automaticamente
+5. **Fallback**: um botão "já paguei, verificar" na própria tela, que chama `POST https://api.checkout.infinitepay.io/payment_check` como segunda checagem, caso o webhook atrase ou falhe
+5.1. **Redirect opcional pra melhorar a UX**: configurar `redirect_url` fazendo o cliente voltar pro AgendHora depois de pagar (em vez de ficar preso na tela da InfinitePay) — a URL de volta chega com `order_nsu`, `slug`, `capture_method` (`pix` ou `credit_card`) e `transaction_nsu` como parâmetros, úteis pra já mostrar "pagamento recebido" sem esperar o webhook
+6. **Só entra nesse fluxo quem não está isento** — e-mails da lista `EmailIsento` continuam pulando o pagamento inteiro, nunca chegam a gerar link de cobrança
+7. Depois de ativo, login normal no `/admin`, sem nada especial
+
+**Confirmado direto no painel da InfinitePay (aba Configurações do Checkout Integrado): não existe Bearer Token nenhum pra gerar.** A identificação é só pelo `handle` no corpo da requisição — não tem o que confirmar além disso. As únicas configurações lá são: habilitar o Checkout Integrado (já ligado), uma etapa de endereço do cliente, e meios de pagamento (Cartão e Pix).
+
+**Ajuste recomendado antes de ir pra produção**: desligar a "Etapa de endereço" nas Configurações do Checkout Integrado — é pensada pra quem vende produto físico (pra onde enviar); pra uma assinatura digital como o AgendHora, só adiciona fricção sem necessidade nenhuma no meio do pagamento.
+
+**Credenciais**: `handle` da InfinitePay (`william-breno-santos`, é a InfiniteTag, sem o símbolo `$`) vai em variável de ambiente no backend — é a única credencial necessária pra essa integração.
+
+
+
+**Avaliado e descartado**: a InfinitePay tem uma área nativa de "Planos e assinaturas" com cobrança recorrente automática. Não serve pro nosso caso por dois motivos confirmados direto no painel: (1) adicionar assinante é um fluxo manual no painel deles, sem API/documentação encontrada — quebraria a automação; (2) a cobrança é numa data fixa de calendário compartilhada por todo o plano (ex: "todo dia 14"), não 30 dias a partir do pagamento de cada assinante, que é a regra já decidida aqui. Manter o Checkout Integrado (link individual + `order_nsu` por cadastro) como o mecanismo real.
+
+## Renovação mensal
+
+Resolve o que antes ficava em aberto: o que acontece depois do primeiro pagamento.
+
+- **`Estabelecimento` ganha o campo `proximo_vencimento`** (data). A cada pagamento confirmado pelo webhook (inicial ou renovação), atualiza pra `data do pagamento + 30 dias` — assim quem paga atrasado não perde dias, sempre leva 30 dias completos por pagamento (em vez de uma data fixa tipo "sempre todo dia 14", que é mais rígida e não traz benefício real no volume atual)
+- **Rotina diária** (mesma infraestrutura de cron já prevista pros lembretes de agendamento), com duas checagens:
+  - Estabelecimentos com `proximo_vencimento` a poucos dias (ex: 3) e sem link de renovação já gerado → gera um novo link único via InfinitePay pro próximo ciclo (`order_nsu` diferente do link inicial, algo como `estabelecimento_id + ano + mes`, pra não confundir com pagamentos anteriores) e envia por e-mail com o valor e a data de vencimento
+  - Estabelecimentos com `proximo_vencimento` já vencido e sem pagamento confirmado → marca `ativo = false`, reaproveitando o bloqueio de acesso já desenhado
+- **Botão "renovar agora" dentro do admin do estabelecimento**: mostra a data de vencimento e permite gerar (ou reaproveitar, se já existir) o link de pagamento na hora — o dono não depende só do e-mail chegar
+- **WhatsApp continua fora** — envio automático é só por e-mail, mesma decisão já tomada antes; nada impede o dono do estabelecimento de encaminhar o link pra si mesmo manualmente
+- **Alerta dentro do admin**: banner no topo, recalculado a cada carregamento da tela (não guarda estado de "já mostrei") — aparece nos dias 3, 2, 1 e no dia do vencimento (`dias_restantes = proximo_vencimento - hoje`, banner visível quando isso for `<= 3`), com o texto mudando conforme o dia ("vence em 3 dias" / "vence em 2 dias" / "vence amanhã" / "vence hoje"). **Importante: a comparação é por data civil, não por hora exata** — compara só o dia/mês/ano de hoje com o de `proximo_vencimento`, sempre no fuso horário do Brasil, ignorando a hora do dia. Isso garante que a mensagem só muda uma vez a cada 24h, na virada do dia — não a cada refresh da página, nem dependendo de que horas a pessoa acessou. É só uma conta feita na hora, não um gatilho de disparo único — assim aparece de novo em todo acesso durante essa janela, e continua mostrando (com mensagem de vencido) se passar do prazo sem pagar. Botão "Renovar agora" gera (ou reaproveita) o link de pagamento na hora
+- **Tela "Meu Plano"** (em Configurações): sempre acessível, não só perto do vencimento — mostra plano atual, status, data do próximo vencimento, e o botão de renovar disponível a qualquer momento (renovação adiantada é permitida; segue a mesma regra de sempre, `data do pagamento + 30 dias`, então quem renova antes ganha mais dias naquele ciclo, sem tratamento especial)
+- Estabelecimentos com `isento = true` não veem banner nem vencimento — a tela "Meu Plano" mostra só "acesso gratuito"
 
 **Em aberto, não decidido**: período de teste grátis antes de cobrar (ex: `ativo = true` por N dias a partir do cadastro) — é uma alavanca de conversão comum, mas fica de fora por enquanto; se decidido depois, é só trocar o valor padrão de `ativo` no cadastro, não exige redesenho.
 
@@ -169,6 +222,18 @@ Página separada, só pro dono do projeto (não pros donos de estabelecimento) �
 - Tela simples: listar e-mails isentos já cadastrados, adicionar novo, remover
 - **`Estabelecimento` ganha o campo `isento`** (booleano) — separado de `ativo`, porque `ativo` sozinho não diz se é isento pra sempre ou um pagante em dia; sem essa marca, uma futura cobrança automática tentaria cobrar quem deveria continuar de graça
 - **Cadastro atualizado**: ao criar a conta em `/cadastro`, checa se o e-mail informado está na lista de `EmailIsento` — se estiver, o `Estabelecimento` já nasce com `ativo = true` e `isento = true`, pulando a tela de instrução de pagamento inteira; se não estiver, segue o fluxo normal já descrito
+
+## Segmentos de negócio (ex: estúdio de tatuagem)
+
+Peça pra caber em negócios com lógica de preço diferente (tatuagem é o caso concreto que motivou isso) sem bifurcar o sistema em dois produtos. A regra é: os campos novos são genéricos e úteis pra qualquer estabelecimento — o segmento só controla o que aparece em destaque na tela, não é lógica de backend separada por tipo de negócio.
+
+- **`Estabelecimento.segmento`**: string, padrão `"geral"`; hoje só existe mais uma opção, `"tatuagem"`. Trocado direto no banco pelo dono do projeto — não é uma escolha que o dono do estabelecimento faz sozinho nesta v1, não precisa de tela pra isso
+- **`Servico.preco` vira opcional** — sem preço cadastrado, a página pública mostra "a combinar" no lugar do valor
+- **`Agendamento.valor_final`** (opcional): quando preenchido, sobrescreve o preço do serviço pro cálculo de faturamento/dashboard. Isso é útil pra qualquer estabelecimento (desconto negociado, serviço com adicional), não só tatuagem — e resolve o problema de o dashboard ficar errado quando o preço do catálogo é só uma estimativa
+- **`Agendamento.valor_sinal`** (opcional) + **`sinal_pago`** (booleano) — depósito antecipado
+- **`Agendamento.link_referencia`** (opcional, texto simples) — cliente cola o link de uma imagem de referência hospedada em outro lugar; não é upload de arquivo nesta v1, que exigiria um serviço de armazenamento à parte
+- Faturamento e dashboard passam a usar `valor_final` quando existir, senão caem no preço padrão do serviço — vale sempre, independente do segmento
+- Quando `segmento = "tatuagem"`: cadastro de serviço não exige preço, e o painel do agendamento mostra sinal + link de referência com destaque em vez de escondidos atrás de "mais opções"
 
 ## Ícones dos serviços
 
@@ -192,8 +257,11 @@ No protótipo visual que já existe, os ícones dos serviços de exemplo foram e
 9. Tela de Clientes (cadastro manual + importação CSV/.vcf + aniversariantes), campo `pago` + separação recebido/a receber no dashboard, exportação CSV
 10. Lembretes automáticos por e-mail (cron)
 11. Bloqueio de acesso por inadimplência: middleware/checagem de `Estabelecimento.ativo` em todas as rotas do admin (login e sessão) e na página pública, com mensagem amigável no lugar do sistema normal quando `ativo = false`
-12. Cadastro e ativação de novos estabelecimentos: página de marketing, formulário de cadastro (cria Usuario dono + Estabelecimento com `ativo = false`), tela pós-cadastro com instrução de pagamento
+12. Cadastro e ativação de novos estabelecimentos: página de marketing, formulário de cadastro (cria Usuario dono + Estabelecimento com `ativo = false`), integração com a API de Checkout da InfinitePay (link de pagamento único por cadastro), webhook de confirmação de pagamento que ativa o Estabelecimento automaticamente, botão de verificação manual como fallback
+12.1. Renovação mensal: campo `proximo_vencimento`, rotina diária de gerar/enviar link de renovação e de desativar quem venceu sem pagar, banner de alerta no admin perto do vencimento, tela "Meu Plano" com botão de renovar sempre disponível
 13. Isenção de pagamento: login de plataforma separado, entidade EmailIsento, tela de gerenciar a lista, checagem no cadastro
+14. Segmentos de negócio: campo `segmento` no Estabelecimento, `preco` opcional no Servico, `valor_final`/`valor_sinal`/`sinal_pago`/`link_referencia` no Agendamento, faturamento usando `valor_final` quando existir, telas ajustando destaque conforme o segmento
+15. Multi-seleção de profissional na agenda e no dashboard (só pro dono); clientes sumidos (60 dias) na tela de Clientes; resumo semanal por e-mail (cron); encaixe de horários (`concluido_em`, aviso não-bloqueante no admin, página pública inalterada)
 
 ## Decisões que não mudar sem repensar
 
@@ -211,3 +279,9 @@ No protótipo visual que já existe, os ícones dos serviços de exemplo foram e
 - Login de plataforma (isenção de pagamento) é uma conta separada de `Usuario`/`Estabelecimento`, sem cadastro público — só pro dono do projeto
 - Comunicado de aniversário de cliente é manual — o sistema só mostra a lista de aniversariantes, quem envia é o dono, pelo canal que preferir; não existe disparo automático nesta v1
 - Importação de clientes é só CSV e .vcf — a API de Contact Picker do navegador foi descartada por só funcionar no Chrome/Android, deixando iPhone de fora
+- Segmento de negócio (`Estabelecimento.segmento`) é trocado direto no banco pelo dono do projeto, não é uma escolha self-service do dono do estabelecimento nesta v1
+- Faturamento usa `Agendamento.valor_final` quando existir, senão cai no preço do serviço — vale pra qualquer estabelecimento, não é exclusivo de nenhum segmento
+- Ativação de conta é automática via webhook da InfinitePay, não mais manual — o dono do projeto só intervém se o webhook falhar e o botão de verificação manual (fallback) também não resolver
+- Renovação mensal: vencimento é sempre `data do último pagamento + 30 dias` (não uma data fixa de calendário) — quem paga atrasado não perde dias de acesso
+- Multi-seleção de profissional (agenda e dashboard) é visível só pro dono — auxiliar não escolhe ver outros profissionais
+- Encaixe de horário é sempre um aviso, nunca um bloqueio, e só existe no admin — a página pública continua sempre conservadora, mesmo quando o profissional já registrou conclusão antecipada de um atendimento anterior
