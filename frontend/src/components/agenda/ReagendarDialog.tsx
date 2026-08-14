@@ -84,7 +84,7 @@ export function ReagendarDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4 py-2">
+        <div className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto py-2">
           <HorarioSelecao
             horarios={horarios}
             loading={loading}

@@ -160,7 +160,7 @@ export function NovoAgendamentoDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-4 py-2">
+          <div className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto py-2">
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-1.5">
                 <Label htmlFor="cliente_nome">Nome do cliente</Label>
