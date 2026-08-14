@@ -17,23 +17,18 @@ export interface FinanceiroInput {
 
 interface AgendamentoFinanceiroSectionProps {
   agendamento: Agendamento
-  // destaque = true quando Estabelecimento.segmento === "tatuagem" — mostra
-  // a seção já aberta, em vez de escondida atrás de "mais opções" (ver
-  // CLAUDE.md "Segmentos de negócio").
-  destaque: boolean
   onSalvar: (id: number, dados: FinanceiroInput) => Promise<Agendamento>
 }
 
-// Valor final, sinal (+ se já foi pago) e link de referência — campos
-// genéricos, úteis pra qualquer estabelecimento, não só quem usa segmento
-// "tatuagem" (que só muda se essa seção nasce aberta ou escondida atrás de
-// "mais opções").
+// Valor final, sinal (+ se já foi pago) e link de referência — o
+// componente-pai só monta isso quando Estabelecimento.segmento ===
+// "tatuagem" (ver CLAUDE.md "Segmentos de negócio"); pra qualquer outro
+// segmento essa seção nem aparece.
 export function AgendamentoFinanceiroSection({
   agendamento,
-  destaque,
   onSalvar,
 }: AgendamentoFinanceiroSectionProps) {
-  const [aberto, setAberto] = useState(destaque)
+  const [aberto, setAberto] = useState(true)
   const [valorFinal, setValorFinal] = useState("")
   const [valorSinal, setValorSinal] = useState("")
   const [sinalPago, setSinalPago] = useState(false)
@@ -45,8 +40,8 @@ export function AgendamentoFinanceiroSection({
     setValorSinal(agendamento.valor_sinal !== null ? String(agendamento.valor_sinal) : "")
     setSinalPago(agendamento.sinal_pago)
     setLinkReferencia(agendamento.link_referencia)
-    setAberto(destaque)
-  }, [agendamento.id, destaque, agendamento.valor_final, agendamento.valor_sinal, agendamento.sinal_pago, agendamento.link_referencia])
+    setAberto(true)
+  }, [agendamento.id, agendamento.valor_final, agendamento.valor_sinal, agendamento.sinal_pago, agendamento.link_referencia])
 
   const alterado =
     valorFinal !== (agendamento.valor_final !== null ? String(agendamento.valor_final) : "") ||
@@ -72,7 +67,7 @@ export function AgendamentoFinanceiroSection({
   }
 
   return (
-    <div className={cn("rounded-lg border border-border", destaque && "border-primary/30 bg-primary/[0.03]")}>
+    <div className="rounded-lg border border-primary/30 bg-primary/[0.03]">
       <button
         type="button"
         onClick={() => setAberto((a) => !a)}

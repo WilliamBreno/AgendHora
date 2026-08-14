@@ -259,80 +259,85 @@ export function NovoAgendamentoDialog({
               />
             </div>
 
-            <div className={cn("rounded-lg border border-border", destaqueFinanceiro && "border-primary/30 bg-primary/[0.03]")}>
-              <button
-                type="button"
-                onClick={() => setMaisOpcoesAberto((a) => !a)}
-                className="flex w-full items-center justify-between px-3 py-2 text-sm font-medium"
-              >
-                <span>Valor final, sinal e referência</span>
-                <ChevronDown
-                  className={cn("size-4 text-muted-foreground transition-transform", maisOpcoesAberto && "rotate-180")}
-                />
-              </button>
+            {/* Só existe pra segmento "tatuagem" — pra qualquer outro
+                segmento, essa seção nem aparece no formulário (ver CLAUDE.md
+                "Segmentos de negócio"). */}
+            {destaqueFinanceiro && (
+              <div className="rounded-lg border border-primary/30 bg-primary/[0.03]">
+                <button
+                  type="button"
+                  onClick={() => setMaisOpcoesAberto((a) => !a)}
+                  className="flex w-full items-center justify-between px-3 py-2 text-sm font-medium"
+                >
+                  <span>Valor final, sinal e referência</span>
+                  <ChevronDown
+                    className={cn("size-4 text-muted-foreground transition-transform", maisOpcoesAberto && "rotate-180")}
+                  />
+                </button>
 
-              {maisOpcoesAberto && (
-                <div className="flex flex-col gap-3 border-t border-border p-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="grid gap-1.5">
-                      <Label htmlFor="valor_final" className="text-xs">
-                        Valor final (R$)
-                      </Label>
-                      <Input
-                        id="valor_final"
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={form.valor_final ?? ""}
-                        placeholder="Preço do serviço"
-                        onChange={(e) =>
-                          atualizarCampo("valor_final", e.target.value === "" ? null : Number(e.target.value))
-                        }
-                      />
+                {maisOpcoesAberto && (
+                  <div className="flex flex-col gap-3 border-t border-border p-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="valor_final" className="text-xs">
+                          Valor final (R$)
+                        </Label>
+                        <Input
+                          id="valor_final"
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={form.valor_final ?? ""}
+                          placeholder="Preço do serviço"
+                          onChange={(e) =>
+                            atualizarCampo("valor_final", e.target.value === "" ? null : Number(e.target.value))
+                          }
+                        />
+                      </div>
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="valor_sinal" className="text-xs">
+                          Sinal (R$)
+                        </Label>
+                        <Input
+                          id="valor_sinal"
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={form.valor_sinal ?? ""}
+                          placeholder="0,00"
+                          onChange={(e) =>
+                            atualizarCampo("valor_sinal", e.target.value === "" ? null : Number(e.target.value))
+                          }
+                        />
+                      </div>
                     </div>
+
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={form.sinal_pago ?? false}
+                        disabled={!form.valor_sinal}
+                        onChange={(e) => atualizarCampo("sinal_pago", e.target.checked)}
+                        className="size-4 rounded border-input accent-primary"
+                      />
+                      Sinal já foi pago
+                    </label>
+
                     <div className="grid gap-1.5">
-                      <Label htmlFor="valor_sinal" className="text-xs">
-                        Sinal (R$)
+                      <Label htmlFor="link_referencia" className="text-xs">
+                        Link de referência
                       </Label>
                       <Input
-                        id="valor_sinal"
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={form.valor_sinal ?? ""}
-                        placeholder="0,00"
-                        onChange={(e) =>
-                          atualizarCampo("valor_sinal", e.target.value === "" ? null : Number(e.target.value))
-                        }
+                        id="link_referencia"
+                        value={form.link_referencia}
+                        onChange={(e) => atualizarCampo("link_referencia", e.target.value)}
+                        placeholder="https://..."
                       />
                     </div>
                   </div>
-
-                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <input
-                      type="checkbox"
-                      checked={form.sinal_pago ?? false}
-                      disabled={!form.valor_sinal}
-                      onChange={(e) => atualizarCampo("sinal_pago", e.target.checked)}
-                      className="size-4 rounded border-input accent-primary"
-                    />
-                    Sinal já foi pago
-                  </label>
-
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="link_referencia" className="text-xs">
-                      Link de referência
-                    </Label>
-                    <Input
-                      id="link_referencia"
-                      value={form.link_referencia}
-                      onChange={(e) => atualizarCampo("link_referencia", e.target.value)}
-                      placeholder="https://..."
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             {conflito && (
               <div className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950">

@@ -230,7 +230,12 @@ export function AgendarPage() {
         )}
 
         {etapa === "dados" && (
-          <DadosClienteForm enviando={enviando} erro={erro} onSubmit={handleConfirmar} />
+          <DadosClienteForm
+            enviando={enviando}
+            erro={erro}
+            mostrarLinkReferencia={estabelecimento?.segmento === "tatuagem"}
+            onSubmit={handleConfirmar}
+          />
         )}
 
         {etapa === "confirmacao" && agendamento && (

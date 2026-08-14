@@ -45,6 +45,10 @@ type estabelecimentoPublicoResponse struct {
 	AvisoTexto    string `json:"aviso_texto"`
 	AvisoCorTexto string `json:"aviso_cor_texto"`
 	AvisoCorFundo string `json:"aviso_cor_fundo"`
+	// Segmento decide se a página pública mostra o campo de link de
+	// referência (só quando "tatuagem" — ver CLAUDE.md "Segmentos de
+	// negócio").
+	Segmento string `json:"segmento"`
 }
 
 // GetPublico retorna só o que a página de agendamento do cliente precisa
@@ -65,6 +69,7 @@ func (h *EstabelecimentoHandler) GetPublico(c *gin.Context) {
 		AvisoTexto:    estabelecimento.AvisoTexto,
 		AvisoCorTexto: estabelecimento.AvisoCorTexto,
 		AvisoCorFundo: estabelecimento.AvisoCorFundo,
+		Segmento:      estabelecimento.Segmento,
 	})
 }
 

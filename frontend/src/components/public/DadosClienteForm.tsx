@@ -18,6 +18,10 @@ export interface DadosCliente {
 interface DadosClienteFormProps {
   enviando: boolean
   erro: string | null
+  // só true quando Estabelecimento.segmento === "tatuagem" — pra qualquer
+  // outro segmento, o campo de link de referência nem aparece (ver
+  // CLAUDE.md "Segmentos de negócio").
+  mostrarLinkReferencia: boolean
   onSubmit: (dados: DadosCliente) => void
 }
 
@@ -29,7 +33,12 @@ const FORM_VAZIO: DadosCliente = {
   link_referencia: "",
 }
 
-export function DadosClienteForm({ enviando, erro, onSubmit }: DadosClienteFormProps) {
+export function DadosClienteForm({
+  enviando,
+  erro,
+  mostrarLinkReferencia,
+  onSubmit,
+}: DadosClienteFormProps) {
   const [form, setForm] = useState<DadosCliente>(FORM_VAZIO)
   const [erroLocal, setErroLocal] = useState<string | null>(null)
 
@@ -80,15 +89,17 @@ export function DadosClienteForm({ enviando, erro, onSubmit }: DadosClienteFormP
           rows={2}
         />
       </div>
-      <div className="grid gap-1.5">
-        <Label htmlFor="link_referencia_publico">Link de referência (opcional)</Label>
-        <Input
-          id="link_referencia_publico"
-          value={form.link_referencia}
-          onChange={(e) => setForm((f) => ({ ...f, link_referencia: e.target.value }))}
-          placeholder="Cole aqui o link de uma imagem de referência, se quiser"
-        />
-      </div>
+      {mostrarLinkReferencia && (
+        <div className="grid gap-1.5">
+          <Label htmlFor="link_referencia_publico">Link de referência (opcional)</Label>
+          <Input
+            id="link_referencia_publico"
+            value={form.link_referencia}
+            onChange={(e) => setForm((f) => ({ ...f, link_referencia: e.target.value }))}
+            placeholder="Cole aqui o link de uma imagem de referência, se quiser"
+          />
+        </div>
+      )}
       {(erroLocal || erro) && <p className="text-sm text-destructive">{erroLocal ?? erro}</p>}
       <Button type="submit" disabled={enviando}>
         {enviando ? "Agendando..." : "Confirmar agendamento"}

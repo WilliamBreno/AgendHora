@@ -256,6 +256,9 @@ export interface EstabelecimentoPublico {
   aviso_texto: string
   aviso_cor_texto: string
   aviso_cor_fundo: string
+  // segmento decide se o formulário público mostra o campo de link de
+  // referência (só quando "tatuagem" — ver CLAUDE.md "Segmentos de negócio").
+  segmento: string
 }
 
 export interface PeriodoMetricas {

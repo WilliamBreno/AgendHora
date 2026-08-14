@@ -182,11 +182,15 @@ export function AgendamentoDetailPanel({
                 </div>
               )}
 
-              <AgendamentoFinanceiroSection
-                agendamento={agendamento}
-                destaque={segmento === "tatuagem"}
-                onSalvar={onAtualizarFinanceiro}
-              />
+              {/* Só existe pra segmento "tatuagem" — pra qualquer outro
+                  segmento, essa seção nem aparece no painel (ver CLAUDE.md
+                  "Segmentos de negócio"). */}
+              {segmento === "tatuagem" && (
+                <AgendamentoFinanceiroSection
+                  agendamento={agendamento}
+                  onSalvar={onAtualizarFinanceiro}
+                />
+              )}
             </div>
 
             <SheetFooter>
