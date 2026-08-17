@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Package,
   Rocket,
   Settings,
   Sparkles,
@@ -26,6 +27,7 @@ const NAV_ITEMS_BASE = [
   { to: "/admin/agenda", label: "Agenda", icon: CalendarRange },
   { to: "/admin/clientes", label: "Clientes", icon: Contact },
   { to: "/admin/servicos", label: "Serviços", icon: Sparkles },
+  { to: "/admin/produtos", label: "Produtos", icon: Package },
 ]
 
 // Equipe e Configurações são exclusivas do dono — um profissional auxiliar

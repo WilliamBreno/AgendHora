@@ -304,3 +304,33 @@ func (h *EstabelecimentoHandler) AtualizarAviso(c *gin.Context) {
 		"aviso_cor_texto": corTexto, "aviso_cor_fundo": corFundo,
 	})
 }
+
+type descontoProfissionalInput struct {
+	// Percentual nil = desliga o desconto (compra interna volta a sair pelo
+	// preço cheio, a não ser que a venda informe um percentual manualmente).
+	Percentual *float64 `json:"percentual"`
+}
+
+// AtualizarDescontoProfissional define o desconto padrão (0-100) aplicado
+// automaticamente quando um profissional compra produto internamente (ver
+// CLAUDE.md "Cadastro de produtos") — decisão financeira, só o dono mexe.
+func (h *EstabelecimentoHandler) AtualizarDescontoProfissional(c *gin.Context) {
+	var input descontoProfissionalInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if input.Percentual != nil && (*input.Percentual < 0 || *input.Percentual > 100) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "percentual precisa estar entre 0 e 100"})
+		return
+	}
+
+	err := h.DB.Model(&models.Estabelecimento{}).
+		Where("id = ?", auth.EstabelecimentoID(c)).
+		Update("desconto_profissional_percentual", input.Percentual).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao atualizar desconto"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"desconto_profissional_percentual": input.Percentual})
+}

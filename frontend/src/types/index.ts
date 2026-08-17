@@ -225,6 +225,10 @@ export interface Estabelecimento {
   // link_pagamento_url é o link InfinitePay do ciclo de cobrança atual —
   // vazio quando isento, já pago, ou quando ainda não foi gerado.
   link_pagamento_url: string
+  // desconto padrão (0-100) aplicado automaticamente quando um profissional
+  // compra um produto internamente — null = nenhum desconto configurado,
+  // continua editável por venda (ver CLAUDE.md "Cadastro de produtos").
+  desconto_profissional_percentual: number | null
   created_at: string
   updated_at: string
 }
@@ -346,4 +350,105 @@ export interface Dashboard {
   ranking_quantidade: RankingItem[]
   ranking_faturamento: RankingItem[]
   sugestoes: Sugestao[]
+  // Métricas de produtos — só vêm preenchidas pro dono (ver CLAUDE.md
+  // "Cadastro de produtos"): auxiliar recebe tudo zerado, porque venda de
+  // produto pro cliente final não tem profissional atribuído. Só contam
+  // vendas pra cliente final — compra interna de profissional não entra em
+  // faturamento.
+  produtos_hoje: ProdutosMetricas
+  produtos_semana: ProdutosMetricas
+  produtos_mes: ProdutosMetricas
+  produtos_mais_vendidos: ProdutoRankingItem[]
+}
+
+export interface ProdutosMetricas {
+  quantidade: number
+  faturamento: number
+  // lucro só soma quando o produto tem custo_unitario cadastrado.
+  lucro: number
+}
+
+export interface ProdutoRankingItem {
+  produto_id: number
+  nome: string
+  quantidade: number
+  faturamento: number
+}
+
+// Produto do catálogo interno — precificação e controle de estoque básicos
+// (ver CLAUDE.md "Cadastro de produtos").
+export interface Produto {
+  id: number
+  nome: string
+  preco: number
+  // custo_unitario é opcional — só quem quiser acompanhar lucro cadastra.
+  custo_unitario: number | null
+  quantidade_estoque: number
+  // estoque_minimo = 0 desativa o alerta de estoque baixo pra esse produto.
+  estoque_minimo: number
+  // ativo=false = descontinuado (soft-disable) — some do fluxo de venda mas
+  // mantém o histórico de vendas antigas intacto.
+  ativo: boolean
+  descricao: string
+  foto: string
+  estabelecimento_id: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ProdutoInput {
+  nome: string
+  preco: number
+  custo_unitario: number | null
+  quantidade_estoque: number
+  estoque_minimo: number
+  ativo?: boolean
+  descricao: string
+  foto: string
+}
+
+export type TipoCompradorVenda = "cliente" | "profissional"
+
+// VendaProduto registra a saída de um produto do estoque, pro cliente final
+// (avulsa ou junto de um agendamento) ou pra compra interna de um
+// profissional (com desconto opcional) — ver CLAUDE.md "Cadastro de produtos".
+// cliente/profissional só vêm preenchidos quando cliente_id/profissional_id
+// não são nulos (preload condicional do GORM).
+export interface VendaProduto {
+  id: number
+  produto_id: number
+  produto: Produto
+  quantidade: number
+  preco_unitario: number
+  valor_total: number
+  tipo_comprador: TipoCompradorVenda
+  cliente_id: number | null
+  cliente?: Pick<Cliente, "id" | "nome" | "telefone">
+  agendamento_id: number | null
+  profissional_id: number | null
+  profissional?: Pick<Usuario, "id" | "nome">
+  percentual_desconto: number | null
+  valor_desconto: number
+  pago: boolean
+  cancelada: boolean
+  observacoes: string
+  estabelecimento_id: number
+  created_at: string
+  updated_at: string
+}
+
+export interface VendaProdutoInput {
+  produto_id: number
+  quantidade: number
+  tipo_comprador: TipoCompradorVenda
+  // usados quando tipo_comprador = "cliente" e não há agendamento vinculado.
+  agendamento_id?: number | null
+  cliente_nome?: string
+  cliente_telefone?: string
+  // usado quando tipo_comprador = "profissional".
+  profissional_id?: number | null
+  // sobrescrevem o padrão do produto/estabelecimento quando informados.
+  preco_unitario?: number | null
+  percentual_desconto?: number | null
+  observacoes?: string
 }

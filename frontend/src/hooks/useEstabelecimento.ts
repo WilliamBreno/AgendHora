@@ -108,6 +108,22 @@ export function useEstabelecimento() {
     return atualizado
   }
 
+  // atualizarDescontoProfissional define o desconto padrão (0-100) aplicado
+  // automaticamente na compra interna de profissionais — null remove o
+  // desconto padrão (ver CLAUDE.md "Cadastro de produtos").
+  async function atualizarDescontoProfissional(percentual: number | null) {
+    const resposta = await apiAdmin.put<{ desconto_profissional_percentual: number | null }>(
+      "/estabelecimento/desconto-profissional",
+      { percentual }
+    )
+    setEstabelecimento((atual) =>
+      atual
+        ? { ...atual, desconto_profissional_percentual: resposta.desconto_profissional_percentual }
+        : atual
+    )
+    return resposta.desconto_profissional_percentual
+  }
+
   return {
     estabelecimento,
     loading,
@@ -118,6 +134,7 @@ export function useEstabelecimento() {
     atualizarAviso,
     renovar,
     verificarRenovacao,
+    atualizarDescontoProfissional,
     recarregar: carregar,
   }
 }

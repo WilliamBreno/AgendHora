@@ -98,6 +98,15 @@ type Estabelecimento struct {
 	// timestamp.
 	UltimoResumoSemanalEm *time.Time `json:"-"`
 
+	// DescontoProfissionalPercentual é o desconto padrão (0-100) aplicado
+	// automaticamente quando um profissional (dono ou auxiliar) compra um
+	// produto internamente — ver CLAUDE.md "Cadastro de produtos". Nil =
+	// nenhum desconto configurado (compra interna sai pelo preço cheio até
+	// o dono definir um valor em Configurações). Fica só como referência
+	// pra pré-preencher a venda; cada VendaProduto guarda o percentual
+	// realmente aplicado, então mudar isso aqui não altera vendas passadas.
+	DescontoProfissionalPercentual *float64 `json:"desconto_profissional_percentual"`
+
 	// LinkPagamentoURL é o link de pagamento único (InfinitePay Checkout
 	// Integrado) gerado pro ciclo de cobrança atual — mostrado na tela
 	// pós-cadastro e, na renovação mensal, na tela "Meu Plano". Vazio quando

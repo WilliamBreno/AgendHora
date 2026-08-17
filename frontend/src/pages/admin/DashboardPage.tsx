@@ -9,6 +9,8 @@ import { MetricaCard } from "@/components/dashboard/MetricaCard"
 import { GraficoFaturamento } from "@/components/dashboard/GraficoFaturamento"
 import { RankingServicos } from "@/components/dashboard/RankingServicos"
 import { SugestoesCards } from "@/components/dashboard/SugestoesCards"
+import { ProdutosMetricaCard } from "@/components/dashboard/ProdutosMetricaCard"
+import { RankingProdutos } from "@/components/dashboard/RankingProdutos"
 import { Button } from "@/components/ui/button"
 import { FiltroProfissionalMultiSelect } from "@/components/common/FiltroProfissionalMultiSelect"
 import {
@@ -171,6 +173,25 @@ export function DashboardPage() {
               metrica="faturamento"
             />
           </div>
+
+          {/* Métricas de produto só vêm preenchidas pro dono — venda pro
+              cliente final não tem profissional atribuído (ver CLAUDE.md
+              "Cadastro de produtos"), então um auxiliar não vê essa seção. */}
+          {ehDono && (
+            <>
+              <div data-stagger>
+                <h2 className="font-heading text-lg font-semibold">Produtos</h2>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3" data-stagger>
+                <ProdutosMetricaCard titulo="Hoje" metricas={dashboard.produtos_hoje} />
+                <ProdutosMetricaCard titulo="Essa semana" metricas={dashboard.produtos_semana} />
+                <ProdutosMetricaCard titulo="Esse mês" metricas={dashboard.produtos_mes} />
+              </div>
+              <div data-stagger>
+                <RankingProdutos itens={dashboard.produtos_mais_vendidos} />
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

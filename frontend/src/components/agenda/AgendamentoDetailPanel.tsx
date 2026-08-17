@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { CheckCircle2, CircleDollarSign } from "lucide-react"
+import { CheckCircle2, CircleDollarSign, ShoppingCart } from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -17,7 +17,8 @@ import {
   AgendamentoFinanceiroSection,
   type FinanceiroInput,
 } from "@/components/agenda/AgendamentoFinanceiroSection"
-import type { Agendamento, StatusAgendamento } from "@/types"
+import { VendaProdutoDialog } from "@/components/produtos/VendaProdutoDialog"
+import type { Agendamento, Produto, StatusAgendamento, Usuario, VendaProdutoInput } from "@/types"
 
 interface AgendamentoDetailPanelProps {
   agendamento: Agendamento | null
@@ -30,6 +31,13 @@ interface AgendamentoDetailPanelProps {
   onAtualizarFinanceiro: (id: number, dados: FinanceiroInput) => Promise<Agendamento>
   onConcluir: (id: number) => Promise<void>
   onReagendarClick: () => void
+  // produtos que o cliente pode levar junto do serviço (ver CLAUDE.md
+  // "Cadastro de produtos") — só o essencial pra registrar a venda vinculada.
+  produtos: Produto[]
+  profissionais: Usuario[]
+  usuarioAtualId: number
+  descontoPadrao: number | null
+  onRegistrarVendaProduto: (input: VendaProdutoInput) => Promise<void>
 }
 
 function formatarHoraConclusao(iso: string) {
@@ -51,10 +59,16 @@ export function AgendamentoDetailPanel({
   onAtualizarFinanceiro,
   onConcluir,
   onReagendarClick,
+  produtos,
+  profissionais,
+  usuarioAtualId,
+  descontoPadrao,
+  onRegistrarVendaProduto,
 }: AgendamentoDetailPanelProps) {
   const [cancelando, setCancelando] = useState(false)
   const [salvandoPago, setSalvandoPago] = useState(false)
   const [concluindo, setConcluindo] = useState(false)
+  const [vendaAberta, setVendaAberta] = useState(false)
 
   async function handleCancelar() {
     if (!agendamento) return
@@ -201,6 +215,12 @@ export function AgendamentoDetailPanel({
                       {concluindo ? "Concluindo..." : "Concluir agora"}
                     </Button>
                   )}
+                  {produtos.length > 0 && (
+                    <Button variant="outline" onClick={() => setVendaAberta(true)}>
+                      <ShoppingCart className="size-4" />
+                      Vender produto
+                    </Button>
+                  )}
                   <Button variant="outline" onClick={onReagendarClick}>
                     Reagendar
                   </Button>
@@ -218,6 +238,19 @@ export function AgendamentoDetailPanel({
           </>
         )}
       </SheetContent>
+
+      {agendamento && (
+        <VendaProdutoDialog
+          open={vendaAberta}
+          onOpenChange={setVendaAberta}
+          produtos={produtos}
+          profissionais={profissionais}
+          usuarioAtualId={usuarioAtualId}
+          descontoPadrao={descontoPadrao}
+          agendamento={{ id: agendamento.id, clienteNome: agendamento.cliente_nome }}
+          onSubmit={onRegistrarVendaProduto}
+        />
+      )}
     </Sheet>
   )
 }

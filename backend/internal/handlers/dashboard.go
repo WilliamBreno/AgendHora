@@ -155,6 +155,88 @@ type dashboardResponse struct {
 	RankingQuantidade  []rankingItem   `json:"ranking_quantidade"`
 	RankingFaturamento []rankingItem   `json:"ranking_faturamento"`
 	Sugestoes          []sugestao      `json:"sugestoes"`
+
+	// Produtos* considera só vendas pro cliente final (tipo_comprador =
+	// cliente) — compra interna de profissional é controle de estoque, não
+	// faturamento de verdade do negócio (ver CLAUDE.md "Cadastro de
+	// produtos"). Só o dono vê esses números: não dá pra atribuir uma venda
+	// de produto a um profissional específico hoje, então um auxiliar
+	// sempre recebe isso zerado.
+	ProdutosHoje         produtosMetricas     `json:"produtos_hoje"`
+	ProdutosSemana       produtosMetricas     `json:"produtos_semana"`
+	ProdutosMes          produtosMetricas     `json:"produtos_mes"`
+	ProdutosMaisVendidos []produtoRankingItem `json:"produtos_mais_vendidos"`
+}
+
+type produtosMetricas struct {
+	Quantidade  int     `json:"quantidade"`
+	Faturamento float64 `json:"faturamento"`
+	// Lucro só soma a parte de vendas cujo produto tem CustoUnitario
+	// cadastrado — sem custo, aquela venda entra no faturamento normalmente
+	// mas não contribui pro lucro (não tem como calcular).
+	Lucro float64 `json:"lucro"`
+}
+
+type produtoRankingItem struct {
+	ProdutoID   uint    `json:"produto_id"`
+	Nome        string  `json:"nome"`
+	Quantidade  int     `json:"quantidade"`
+	Faturamento float64 `json:"faturamento"`
+}
+
+// metricasProdutos soma quantidade/faturamento/lucro das vendas (já
+// filtradas por tipo_comprador=cliente e não-canceladas) cuja data cai
+// dentro de [inicio, fim] — mesmo padrão de metricasPeriodo, mas pra
+// VendaProduto em vez de Agendamento.
+func metricasProdutos(vendas []models.VendaProduto, inicio, fim time.Time) produtosMetricas {
+	m := produtosMetricas{}
+	for _, v := range vendas {
+		dia := time.Date(v.CreatedAt.Year(), v.CreatedAt.Month(), v.CreatedAt.Day(), 0, 0, 0, 0, time.UTC)
+		if dia.Before(inicio) || dia.After(fim) {
+			continue
+		}
+		m.Quantidade += v.Quantidade
+		m.Faturamento += v.ValorTotal
+		if v.Produto.CustoUnitario != nil {
+			m.Lucro += v.ValorTotal - (*v.Produto.CustoUnitario * float64(v.Quantidade))
+		}
+	}
+	return m
+}
+
+// rankingProdutos lista os produtos mais vendidos (por quantidade) no
+// intervalo — mesma ideia do ranking de serviços, só que não separa por
+// quantidade/faturamento porque a lista de produtos tende a ser bem menor
+// que a de agendamentos.
+func rankingProdutos(vendas []models.VendaProduto, inicio, fim time.Time) []produtoRankingItem {
+	porProduto := map[uint]*produtoRankingItem{}
+	for _, v := range vendas {
+		dia := time.Date(v.CreatedAt.Year(), v.CreatedAt.Month(), v.CreatedAt.Day(), 0, 0, 0, 0, time.UTC)
+		if dia.Before(inicio) || dia.After(fim) {
+			continue
+		}
+		item, ok := porProduto[v.ProdutoID]
+		if !ok {
+			item = &produtoRankingItem{ProdutoID: v.ProdutoID, Nome: v.Produto.Nome}
+			porProduto[v.ProdutoID] = item
+		}
+		item.Quantidade += v.Quantidade
+		item.Faturamento += v.ValorTotal
+	}
+
+	lista := make([]produtoRankingItem, 0, len(porProduto))
+	for _, item := range porProduto {
+		lista = append(lista, *item)
+	}
+	for i := 1; i < len(lista); i++ {
+		for j := i; j > 0 && lista[j].Quantidade > lista[j-1].Quantidade; j-- {
+			lista[j], lista[j-1] = lista[j-1], lista[j]
+		}
+	}
+	if len(lista) > 5 {
+		lista = lista[:5]
+	}
+	return lista
 }
 
 // Get monta o dashboard inteiro a partir de uma única consulta (últimos 60
@@ -206,6 +288,24 @@ func (h *DashboardHandler) Get(c *gin.Context) {
 	}
 	resposta.RankingQuantidade, resposta.RankingFaturamento = ranking(agendamentos, inicioMes, fimMes)
 	resposta.Sugestoes = gerarSugestoes(agendamentos, horarios, hoje, agora)
+
+	// produtos: só o dono vê (ver comentário em dashboardResponse) — um
+	// auxiliar recebe os campos zerados/vazios, sem consulta extra ao banco.
+	if auth.Papel(c) != models.PapelAuxiliar {
+		var vendasProdutos []models.VendaProduto
+		err := h.DB.Preload("Produto").
+			Where(
+				"estabelecimento_id = ? AND tipo_comprador = ? AND cancelada = ? AND created_at >= ?",
+				estabelecimentoID, models.CompradorCliente, false, inicioJanela,
+			).
+			Find(&vendasProdutos).Error
+		if err == nil {
+			resposta.ProdutosHoje = metricasProdutos(vendasProdutos, hoje, hoje)
+			resposta.ProdutosSemana = metricasProdutos(vendasProdutos, inicioSemana(hoje), fimSemana(hoje))
+			resposta.ProdutosMes = metricasProdutos(vendasProdutos, inicioMes, fimMes)
+			resposta.ProdutosMaisVendidos = rankingProdutos(vendasProdutos, inicioMes, fimMes)
+		}
+	}
 
 	c.JSON(http.StatusOK, resposta)
 }

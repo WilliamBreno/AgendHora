@@ -13,6 +13,8 @@ import { ReagendarDialog } from "@/components/agenda/ReagendarDialog"
 import { useAgendamentos } from "@/hooks/useAgendamentos"
 import { useServicos } from "@/hooks/useServicos"
 import { useEquipe } from "@/hooks/useEquipe"
+import { useProdutos } from "@/hooks/useProdutos"
+import { useVendasProdutos } from "@/hooks/useVendasProdutos"
 import { useAuth } from "@/contexts/AuthContext"
 import {
   dataDeHoje,
@@ -40,7 +42,7 @@ const VISOES: { valor: Visao; label: string }[] = [
 ]
 
 export function AgendaPage() {
-  const { ehDono, estabelecimento } = useAuth()
+  const { ehDono, estabelecimento, usuario } = useAuth()
   const segmento = estabelecimento?.segmento ?? "geral"
   const hoje = dataDeHoje()
   const hojeISO = paraISODate(hoje.ano, hoje.mes, hoje.dia)
@@ -81,6 +83,8 @@ export function AgendaPage() {
     concluir,
   } = useAgendamentos(inicio, fim, profissionalFiltro)
   const { servicos } = useServicos()
+  const { produtos } = useProdutos()
+  const { registrar: registrarVendaProduto } = useVendasProdutos()
   const profissionais = equipe?.profissionais ?? []
 
   const agendamentosPorDia = useMemo(() => {
@@ -276,6 +280,13 @@ export function AgendaPage() {
         onAtualizarFinanceiro={handleAtualizarFinanceiro}
         onConcluir={handleConcluir}
         onReagendarClick={() => setReagendarAberto(true)}
+        produtos={produtos}
+        profissionais={profissionais}
+        usuarioAtualId={usuario?.id ?? 0}
+        descontoPadrao={estabelecimento?.desconto_profissional_percentual ?? null}
+        onRegistrarVendaProduto={async (input) => {
+          await registrarVendaProduto(input)
+        }}
       />
 
       <ReagendarDialog

@@ -8,6 +8,7 @@ import { ComecandoPage } from "@/pages/admin/ComecandoPage"
 import { AgendaPage } from "@/pages/admin/AgendaPage"
 import { ClientesPage } from "@/pages/admin/ClientesPage"
 import { ServicosPage } from "@/pages/admin/ServicosPage"
+import { ProdutosPage } from "@/pages/admin/ProdutosPage"
 import { ConfiguracoesPage } from "@/pages/admin/ConfiguracoesPage"
 import { EquipePage } from "@/pages/admin/EquipePage"
 import { BloqueiosPage } from "@/pages/admin/BloqueiosPage"
@@ -49,6 +50,7 @@ function App() {
                 <Route path="agenda" element={<AgendaPage />} />
                 <Route path="clientes" element={<ClientesPage />} />
                 <Route path="servicos" element={<ServicosPage />} />
+                <Route path="produtos" element={<ProdutosPage />} />
                 <Route element={<RotaSomenteDono />}>
                   <Route path="configuracoes" element={<ConfiguracoesPage />} />
                   <Route path="equipe" element={<EquipePage />} />

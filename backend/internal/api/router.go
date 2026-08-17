@@ -71,6 +71,8 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 	bloqueioHandler := handlers.NewBloqueioHandler(db)
 	clienteHandler := handlers.NewClienteHandler(db)
 	plataformaHandler := handlers.NewPlataformaHandler(db, gerenciador, plataformaSenha)
+	produtoHandler := handlers.NewProdutoHandler(db)
+	vendaProdutoHandler := handlers.NewVendaProdutoHandler(db)
 
 	apiGroup := router.Group("/api")
 	{
@@ -110,6 +112,10 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 			admin.PUT("/estabelecimento/horario", authpkg.ExigirDono(), estabelecimentoHandler.AtualizarHorario)
 			admin.PUT("/estabelecimento/logo", authpkg.ExigirDono(), estabelecimentoHandler.AtualizarLogo)
 			admin.PUT("/estabelecimento/aviso", authpkg.ExigirDono(), estabelecimentoHandler.AtualizarAviso)
+			// desconto padrão aplicado quando um profissional compra produto
+			// internamente (ver CLAUDE.md "Cadastro de produtos") — decisão
+			// financeira, só o dono mexe.
+			admin.PUT("/estabelecimento/desconto-profissional", authpkg.ExigirDono(), estabelecimentoHandler.AtualizarDescontoProfissional)
 
 			// "Meu Plano" (Configurações) e o banner de vencimento — gerar/
 			// reaproveitar o link de renovação e confirmar sem esperar o
@@ -157,6 +163,24 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 			admin.POST("/clientes", clienteHandler.Create)
 			admin.PUT("/clientes/:id", clienteHandler.Update)
 			admin.POST("/clientes/importar", clienteHandler.Importar)
+
+			// cadastro de produtos (ver CLAUDE.md "Cadastro de produtos") —
+			// mesma regra de acesso do cadastro de Serviços, sem gate de dono.
+			admin.GET("/produtos", produtoHandler.List)
+			admin.POST("/produtos", produtoHandler.Create)
+			admin.GET("/produtos/:id", produtoHandler.Get)
+			admin.PUT("/produtos/:id", produtoHandler.Update)
+			admin.DELETE("/produtos/:id", produtoHandler.Delete)
+
+			// vendas de produto — pro cliente final (avulsa ou junto de um
+			// agendamento) ou compra interna de um profissional, com desconto
+			// automático opcional. Fora de /produtos (não /produtos/vendas) de
+			// propósito: o Gin não permite um segmento estático ("vendas") e
+			// um wildcard (":id", de GET /produtos/:id) no mesmo nível da rota.
+			admin.GET("/vendas-produtos", vendaProdutoHandler.List)
+			admin.POST("/vendas-produtos", vendaProdutoHandler.Create)
+			admin.PATCH("/vendas-produtos/:id/pago", vendaProdutoHandler.AtualizarPago)
+			admin.PATCH("/vendas-produtos/:id/cancelar", vendaProdutoHandler.Cancelar)
 		}
 
 		publico := apiGroup.Group("/publico/:slug")

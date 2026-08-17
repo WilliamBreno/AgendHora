@@ -7,6 +7,7 @@ import { HorarioFuncionamentoEditor } from "@/components/configuracoes/HorarioFu
 import { LogoUploadField } from "@/components/configuracoes/LogoUploadField"
 import { WhatsAppIntegracaoCard } from "@/components/configuracoes/WhatsAppIntegracaoCard"
 import { AvisoEditor } from "@/components/configuracoes/AvisoEditor"
+import { DescontoProfissionalEditor } from "@/components/configuracoes/DescontoProfissionalEditor"
 import { MeuPlanoCard } from "@/components/configuracoes/MeuPlanoCard"
 import { Button } from "@/components/ui/button"
 
@@ -21,6 +22,7 @@ export function ConfiguracoesPage() {
     atualizarAviso,
     renovar,
     verificarRenovacao,
+    atualizarDescontoProfissional,
   } = useEstabelecimento()
 
   const linkPublico = estabelecimento ? `${window.location.origin}/${estabelecimento.slug}` : ""
@@ -119,6 +121,24 @@ export function ConfiguracoesPage() {
               corTexto={estabelecimento.aviso_cor_texto}
               corFundo={estabelecimento.aviso_cor_fundo}
               onAtualizar={atualizarAviso}
+            />
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="font-heading font-medium">Desconto da equipe em produtos</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Quando um profissional compra um produto internamente, esse desconto entra
+          automaticamente — pode ser ajustado em cada venda.
+        </p>
+        <div className="mt-4">
+          {loading || !estabelecimento ? (
+            <p className="text-sm text-muted-foreground">Carregando...</p>
+          ) : (
+            <DescontoProfissionalEditor
+              percentual={estabelecimento.desconto_profissional_percentual}
+              onAtualizar={atualizarDescontoProfissional}
             />
           )}
         </div>
