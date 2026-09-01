@@ -15,7 +15,12 @@ import { usePublicoEstabelecimento } from "@/hooks/usePublicoEstabelecimento"
 import { usePublicoProfissionais } from "@/hooks/usePublicoProfissionais"
 import { useDisponibilidade } from "@/hooks/useDisponibilidade"
 import { apiPublico, ApiError } from "@/lib/api"
-import { formatarDataExibicao } from "@/lib/formatacao"
+import {
+  duracaoEfetivaMin,
+  formatarDataExibicao,
+  formatarDuracao,
+  formatarPrecoTotalServicos,
+} from "@/lib/formatacao"
 import type { Agendamento, ProfissionalPublico, Servico } from "@/types"
 
 type Etapa = "servico" | "profissional" | "horario" | "dados" | "confirmacao"
@@ -32,6 +37,17 @@ const TITULO_ETAPA: Partial<Record<Etapa, string>> = {
   dados: "Seus dados",
 }
 
+// servicosCompativeis filtra a lista pra só mostrar o que pode ser
+// combinado com o que já foi escolhido — um serviço individual (ver
+// CLAUDE.md "Serviços individuais") só combina com o catálogo geral e com
+// outros serviços individuais do MESMO profissional; nunca com o de um
+// colega, senão o combo ficaria impossível de atender num horário só.
+function servicosCompativeis(servicos: Servico[], selecionados: Servico[]): Servico[] {
+  const profissionalExigido = selecionados.find((s) => s.profissional_id !== null)?.profissional_id
+  if (profissionalExigido === undefined) return servicos
+  return servicos.filter((s) => s.profissional_id === null || s.profissional_id === profissionalExigido)
+}
+
 export function AgendarPage() {
   const { slug = "" } = useParams()
   const [searchParams] = useSearchParams()
@@ -41,7 +57,10 @@ export function AgendarPage() {
   const { profissionais, loading: carregandoProfissionais } = usePublicoProfissionais(slug)
 
   const [etapa, setEtapa] = useState<Etapa>("servico")
-  const [servico, setServico] = useState<Servico | null>(null)
+  // primeiro item = serviço principal — ver CLAUDE.md "Agendamento com mais
+  // de um serviço". No fluxo padrão (toggle desligado) sempre tem 0 ou 1 item.
+  const [servicosSelecionados, setServicosSelecionados] = useState<Servico[]>([])
+  const [multiServicoAtivo, setMultiServicoAtivo] = useState(false)
   const [profissional, setProfissional] = useState<ProfissionalPublico | null>(null)
   const [data, setData] = useState("")
   const [hora, setHora] = useState("")
@@ -55,22 +74,26 @@ export function AgendarPage() {
   const [viaSugestaoReagendamento, setViaSugestaoReagendamento] = useState(false)
   const prefillAplicado = useRef(false)
 
-  // pré-seleciona serviço/profissional/data/horário quando o link vem com
-  // esses parâmetros (e-mail de reagendamento automático) — o cliente só
-  // confirma, sem precisar escolher tudo de novo. Roda uma única vez,
-  // assim que serviços e profissionais terminarem de carregar.
+  // pré-seleciona serviço(s)/profissional/data/horário quando o link vem
+  // com esses parâmetros (e-mail de reagendamento automático) — o cliente
+  // só confirma, sem precisar escolher tudo de novo. servico_id pode
+  // repetir na query string quando o último agendamento tinha mais de um
+  // serviço. Roda uma única vez, assim que serviços e profissionais
+  // terminarem de carregar.
   useEffect(() => {
     if (prefillAplicado.current) return
     if (carregandoServicos || carregandoProfissionais) return
     if (servicos.length === 0) return
     prefillAplicado.current = true
 
-    const servicoIdParam = searchParams.get("servico_id")
-    if (!servicoIdParam) return
-    const servicoEncontrado = servicos.find((s) => String(s.id) === servicoIdParam)
-    if (!servicoEncontrado) return
+    const servicoIdsParam = searchParams.getAll("servico_id")
+    if (servicoIdsParam.length === 0) return
+    const encontrados = servicoIdsParam
+      .map((id) => servicos.find((s) => String(s.id) === id))
+      .filter((s): s is Servico => s !== undefined)
+    if (encontrados.length === 0) return
 
-    setServico(servicoEncontrado)
+    setServicosSelecionados(encontrados)
 
     const profissionalIdParam = searchParams.get("profissional_id")
     const dataParam = searchParams.get("data")
@@ -96,7 +119,7 @@ export function AgendarPage() {
 
   const { horarios, loading: carregandoHorarios } = useDisponibilidade(
     slug,
-    servico?.id ?? null,
+    servicosSelecionados.map((s) => s.id),
     profissional?.id ?? null,
     data
   )
@@ -115,7 +138,8 @@ export function AgendarPage() {
 
   function reiniciar() {
     setEtapa("servico")
-    setServico(null)
+    setServicosSelecionados([])
+    setMultiServicoAtivo(false)
     setProfissional(null)
     setData("")
     setHora("")
@@ -124,15 +148,17 @@ export function AgendarPage() {
     setViaSugestaoReagendamento(false)
   }
 
-  // com só um profissional (o caso comum), pula direto pro horário — o
-  // passo de escolha só aparece quando existe de fato uma escolha a fazer.
-  // Serviço individual (ver CLAUDE.md "Serviços individuais") já tem o
-  // profissional implícito — pula o passo de escolha mesmo com mais de um
-  // profissional na equipe, o cliente nem precisa saber que existem outros.
-  function selecionarServico(s: Servico) {
-    setServico(s)
-    if (s.profissional_id !== null) {
-      setProfissional(profissionais.find((p) => p.id === s.profissional_id) ?? null)
+  // avancarComServicos decide o próximo passo a partir da seleção final: um
+  // serviço individual (ver CLAUDE.md "Serviços individuais") já define o
+  // profissional sozinho, então pula direto pro horário — o cliente nem
+  // sabe que existem outros profissionais. Sem isso, só pergunta quando há
+  // de fato mais de um profissional na equipe.
+  function avancarComServicos(selecionados: Servico[]) {
+    if (selecionados.length === 0) return
+    setServicosSelecionados(selecionados)
+    const profissionalExigido = selecionados.find((s) => s.profissional_id !== null)?.profissional_id
+    if (profissionalExigido !== undefined) {
+      setProfissional(profissionais.find((p) => p.id === profissionalExigido) ?? null)
       setEtapa("horario")
     } else if (profissionais.length > 1) {
       setEtapa("profissional")
@@ -142,8 +168,26 @@ export function AgendarPage() {
     }
   }
 
+  // clique num serviço com o toggle de múltiplos serviços desligado —
+  // avança na hora, igual sempre funcionou.
+  function selecionarServico(s: Servico) {
+    avancarComServicos([s])
+  }
+
+  function alternarServicoMultiplo(s: Servico) {
+    setServicosSelecionados((atual) =>
+      atual.some((sel) => sel.id === s.id) ? atual.filter((sel) => sel.id !== s.id) : [...atual, s]
+    )
+  }
+
+  function alternarModoMultiplo(ativo: boolean) {
+    setMultiServicoAtivo(ativo)
+    setServicosSelecionados([])
+  }
+
   function voltar() {
-    const exigiaEscolhaProfissional = servico?.profissional_id === null && profissionais.length > 1
+    const somenteGerais = servicosSelecionados.every((s) => s.profissional_id === null)
+    const exigiaEscolhaProfissional = somenteGerais && profissionais.length > 1
     if (etapa === "profissional") setEtapa("servico")
     else if (etapa === "horario") setEtapa(exigiaEscolhaProfissional ? "profissional" : "servico")
     else if (etapa === "dados") {
@@ -153,13 +197,15 @@ export function AgendarPage() {
   }
 
   async function handleConfirmar(dadosCliente: DadosCliente) {
-    if (!servico || !profissional || !data || !hora) return
+    const [principal, ...adicionais] = servicosSelecionados
+    if (!principal || !profissional || !data || !hora) return
     setEnviando(true)
     setErro(null)
     try {
       const criado = await apiPublico(slug).post<Agendamento>("/agendamentos", {
         ...dadosCliente,
-        servico_id: servico.id,
+        servico_id: principal.id,
+        servicos_adicionais_ids: adicionais.map((s) => s.id),
         profissional_id: profissional.id,
         data,
         hora,
@@ -207,6 +253,12 @@ export function AgendarPage() {
       </div>
     )
   }
+
+  const listaCompativel = servicosCompativeis(servicos, servicosSelecionados)
+  const duracaoTotalSelecionada = servicosSelecionados.reduce(
+    (soma, s) => soma + duracaoEfetivaMin(s),
+    0
+  )
 
   return (
     <div className="mx-auto flex min-h-svh max-w-lg flex-col gap-6 px-4 py-8">
@@ -258,7 +310,38 @@ export function AgendarPage() {
               Nenhum serviço disponível no momento.
             </p>
           ) : (
-            <ServicoSelecao servicos={servicos} onSelecionar={selecionarServico} />
+            <div className="flex flex-col gap-4">
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={multiServicoAtivo}
+                  onChange={(e) => alternarModoMultiplo(e.target.checked)}
+                  className="size-4 rounded border-input accent-primary"
+                />
+                Quero agendar mais de um serviço nesse horário
+              </label>
+
+              <ServicoSelecao
+                servicos={listaCompativel}
+                onSelecionar={selecionarServico}
+                multiplo={multiServicoAtivo}
+                selecionados={servicosSelecionados}
+                onToggle={alternarServicoMultiplo}
+              />
+
+              {multiServicoAtivo && servicosSelecionados.length > 0 && (
+                <div className="flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/[0.03] p-3 text-sm">
+                  <p className="text-muted-foreground">
+                    {servicosSelecionados.map((s) => s.nome).join(" + ")} ·{" "}
+                    {formatarDuracao(duracaoTotalSelecionada)} ·{" "}
+                    {formatarPrecoTotalServicos(servicosSelecionados)}
+                  </p>
+                  <Button type="button" onClick={() => avancarComServicos(servicosSelecionados)}>
+                    Continuar
+                  </Button>
+                </div>
+              )}
+            </div>
           ))}
 
         {etapa === "profissional" && (
@@ -271,7 +354,7 @@ export function AgendarPage() {
           />
         )}
 
-        {etapa === "horario" && servico && profissional && (
+        {etapa === "horario" && servicosSelecionados.length > 0 && profissional && (
           <div className="flex flex-col gap-4">
             <HorarioSelecao
               horarios={horarios}

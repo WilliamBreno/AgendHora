@@ -24,11 +24,18 @@ type Agendamento struct {
 	// manual. default:0 só existe pra migration em cima de linhas
 	// existentes (ver database.MigrarClientes, que preenche o valor real
 	// em seguida a partir dos dados que já estavam gravados soltos aqui).
-	ClienteID uint      `gorm:"not null;default:0;index" json:"cliente_id"`
-	Cliente   Cliente   `json:"cliente,omitempty"`
-	ServicoID uint      `gorm:"not null;index" json:"servico_id"`
-	Servico   Servico   `json:"servico,omitempty"`
-	Data      time.Time `gorm:"type:date;not null;index" json:"data"`
+	ClienteID uint    `gorm:"not null;default:0;index" json:"cliente_id"`
+	Cliente   Cliente `json:"cliente,omitempty"`
+	ServicoID uint    `gorm:"not null;index" json:"servico_id"`
+	Servico   Servico `json:"servico,omitempty"`
+	// ServicosAdicionais são os serviços ALÉM do principal (ServicoID/
+	// Servico) escolhidos pro mesmo horário — ver CLAUDE.md "Agendamento com
+	// mais de um serviço". Vazio (caso mais comum) = um serviço só,
+	// comportamento de sempre. Usar TodosServicos() sempre que precisar
+	// considerar o conjunto inteiro (duração, preço) — nunca só `Servico`
+	// direto, senão a conta fica incompleta pra um agendamento combo.
+	ServicosAdicionais []AgendamentoServico `gorm:"foreignKey:AgendamentoID" json:"servicos_adicionais,omitempty"`
+	Data               time.Time            `gorm:"type:date;not null;index" json:"data"`
 	// Hora fica no formato "HH:MM" (24h) para evitar problemas de fuso horário.
 	Hora        string            `gorm:"not null" json:"hora"`
 	Status      StatusAgendamento `gorm:"type:varchar(20);not null;default:confirmado;index" json:"status"`
@@ -88,4 +95,45 @@ type Agendamento struct {
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// TodosServicos devolve o serviço principal seguido dos adicionais, na
+// ordem em que foram escolhidos — usar sempre que duração ou preço
+// precisarem considerar TODOS os serviços do agendamento, não só o
+// principal (ver CLAUDE.md "Agendamento com mais de um serviço"). Exige
+// ServicosAdicionais.Servico pré-carregado; sem isso, cada item adicional
+// vem com um Servico zerado.
+func (a Agendamento) TodosServicos() []Servico {
+	servicos := make([]Servico, 0, 1+len(a.ServicosAdicionais))
+	servicos = append(servicos, a.Servico)
+	for _, item := range a.ServicosAdicionais {
+		servicos = append(servicos, item.Servico)
+	}
+	return servicos
+}
+
+// DuracaoTotalEfetivaMin soma a duração efetiva (ver Servico.DuracaoEfetivaMin)
+// de todos os serviços do agendamento — é o que de fato bloqueia a agenda,
+// sempre sequencial (um atendimento emendado no outro, sem sobreposição).
+func (a Agendamento) DuracaoTotalEfetivaMin() int {
+	total := 0
+	for _, s := range a.TodosServicos() {
+		total += s.DuracaoEfetivaMin()
+	}
+	return total
+}
+
+// PrecoTotal soma o preço de todos os serviços do agendamento — nil se
+// QUALQUER um deles não tiver preço cadastrado ("a combinar" pesa mais que
+// qualquer soma parcial, pra nunca mostrar um valor que já sabemos que está
+// incompleto).
+func (a Agendamento) PrecoTotal() *float64 {
+	var total float64
+	for _, s := range a.TodosServicos() {
+		if s.Preco == nil {
+			return nil
+		}
+		total += *s.Preco
+	}
+	return &total
 }

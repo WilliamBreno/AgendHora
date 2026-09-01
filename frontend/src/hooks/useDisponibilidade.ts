@@ -2,17 +2,21 @@ import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { apiPublico, ApiError } from "@/lib/api"
 
+// servicoIds pode ter mais de um item quando o cliente está agendando um
+// combo (ver CLAUDE.md "Agendamento com mais de um serviço") — a query
+// repete o parâmetro servico_id, o backend soma a duração de todos.
 export function useDisponibilidade(
   slug: string,
-  servicoId: number | null,
+  servicoIds: number[],
   profissionalId: number | null,
   data: string
 ) {
   const [horarios, setHorarios] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  const chaveServicos = servicoIds.join(",")
 
   useEffect(() => {
-    if (!servicoId || !profissionalId || !data) {
+    if (servicoIds.length === 0 || !profissionalId || !data) {
       setHorarios([])
       return
     }
@@ -20,9 +24,11 @@ export function useDisponibilidade(
     let cancelado = false
     setLoading(true)
 
+    const query = servicoIds.map((id) => `servico_id=${id}`).join("&")
+
     apiPublico(slug)
       .get<{ horarios: string[] }>(
-        `/disponibilidade?servico_id=${servicoId}&profissional_id=${profissionalId}&data=${data}`
+        `/disponibilidade?${query}&profissional_id=${profissionalId}&data=${data}`
       )
       .then((res) => {
         if (!cancelado) setHorarios(res.horarios)
@@ -40,7 +46,8 @@ export function useDisponibilidade(
     return () => {
       cancelado = true
     }
-  }, [slug, servicoId, profissionalId, data])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, chaveServicos, profissionalId, data])
 
   return { horarios, loading }
 }

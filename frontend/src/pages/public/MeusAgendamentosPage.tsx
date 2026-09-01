@@ -18,7 +18,7 @@ import {
 import { ThemeToggle } from "@/components/common/ThemeToggle"
 import { usePublicoEstabelecimento } from "@/hooks/usePublicoEstabelecimento"
 import { useMeusAgendamentos } from "@/hooks/useMeusAgendamentos"
-import { formatarDataExibicao, formatarPrecoServico } from "@/lib/formatacao"
+import { formatarDataExibicao, formatarPrecoTotalServicos, nomesServicos } from "@/lib/formatacao"
 import { CORES_SERVICO_CLASSES } from "@/lib/cores"
 import { DynamicIcon } from "@/lib/icons"
 import { cn } from "@/lib/utils"
@@ -123,10 +123,10 @@ export function MeusAgendamentosPage() {
                     <DynamicIcon name={ag.servico.icone} className={cn("size-5", cores.text)} />
                   </div>
                   <div className="flex-1">
-                    <p className="font-heading font-semibold">{ag.servico.nome}</p>
+                    <p className="font-heading font-semibold">{nomesServicos(ag.servicos)}</p>
                     <p className="text-sm text-muted-foreground">
                       {formatarDataExibicao(ag.data)} às {ag.hora} ·{" "}
-                      {formatarPrecoServico(ag.servico.preco, ag.servico.preco_a_partir)}
+                      {formatarPrecoTotalServicos(ag.servicos)}
                     </p>
                     <p
                       className={cn(
@@ -157,7 +157,7 @@ export function MeusAgendamentosPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancelar agendamento</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja cancelar "{paraCancelar?.servico.nome}" em{" "}
+              Tem certeza que deseja cancelar "{paraCancelar && nomesServicos(paraCancelar.servicos)}" em{" "}
               {paraCancelar && formatarDataExibicao(paraCancelar.data)}?
             </AlertDialogDescription>
           </AlertDialogHeader>

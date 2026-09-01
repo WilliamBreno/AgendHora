@@ -4,17 +4,20 @@ import { apiAdmin, ApiError } from "@/lib/api"
 
 // Mesma ideia de useDisponibilidade, mas pra área admin (usa apiAdmin,
 // autenticado) — usado no reagendamento, que reaproveita o motor de
-// disponibilidade já existente.
+// disponibilidade já existente. servicoIds pode ter mais de um item quando
+// o agendamento original tem mais de um serviço (ver CLAUDE.md "Agendamento
+// com mais de um serviço").
 export function useDisponibilidadeAdmin(
-  servicoId: number | null,
+  servicoIds: number[],
   profissionalId: number | null,
   data: string
 ) {
   const [horarios, setHorarios] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  const chaveServicos = servicoIds.join(",")
 
   useEffect(() => {
-    if (!servicoId || !profissionalId || !data) {
+    if (servicoIds.length === 0 || !profissionalId || !data) {
       setHorarios([])
       return
     }
@@ -22,9 +25,11 @@ export function useDisponibilidadeAdmin(
     let cancelado = false
     setLoading(true)
 
+    const query = servicoIds.map((id) => `servico_id=${id}`).join("&")
+
     apiAdmin
       .get<{ horarios: string[] }>(
-        `/disponibilidade?servico_id=${servicoId}&profissional_id=${profissionalId}&data=${data}`
+        `/disponibilidade?${query}&profissional_id=${profissionalId}&data=${data}`
       )
       .then((res) => {
         if (!cancelado) setHorarios(res.horarios)
@@ -42,7 +47,8 @@ export function useDisponibilidadeAdmin(
     return () => {
       cancelado = true
     }
-  }, [servicoId, profissionalId, data])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveServicos, profissionalId, data])
 
   return { horarios, loading }
 }

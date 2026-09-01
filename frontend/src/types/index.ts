@@ -61,6 +61,12 @@ export interface Agendamento {
   cliente_email: string
   servico_id: number
   servico: Servico
+  // servicos é a lista completa (o principal primeiro, seguido dos
+  // adicionais quando o agendamento tem mais de um) — usar isso pra listar
+  // "Corte + Barba"; servico/servico_id continuam existindo com só o
+  // principal, pra telas que só precisam de um resumo rápido (cor/ícone da
+  // pílula, por exemplo) — ver CLAUDE.md "Agendamento com mais de um serviço".
+  servicos: Servico[]
   profissional_id: number
   profissional_nome: string
   data: string // "YYYY-MM-DD"
@@ -101,6 +107,10 @@ export interface AgendamentoInput {
   cliente_telefone: string
   cliente_email?: string
   servico_id: number
+  // serviços além do principal, pro mesmo horário (ver CLAUDE.md
+  // "Agendamento com mais de um serviço") — opcional, vazio/ausente é o
+  // comportamento de sempre (um serviço só).
+  servicos_adicionais_ids?: number[]
   profissional_id: number
   data: string
   hora: string

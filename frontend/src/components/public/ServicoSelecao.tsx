@@ -1,4 +1,4 @@
-import { User } from "lucide-react"
+import { Check, User } from "lucide-react"
 import { DynamicIcon } from "@/lib/icons"
 import { CORES_SERVICO_CLASSES } from "@/lib/cores"
 import { cn } from "@/lib/utils"
@@ -8,20 +8,42 @@ import type { Servico } from "@/types"
 interface ServicoSelecaoProps {
   servicos: Servico[]
   onSelecionar: (servico: Servico) => void
+  // multiplo (ver CLAUDE.md "Agendamento com mais de um serviço"): em vez de
+  // avançar na hora do clique, o card vira um toggle — quem chama decide
+  // quando continuar (o pai já filtra `servicos` pra só mostrar combinações
+  // compatíveis, ver AgendarPage).
+  multiplo?: boolean
+  selecionados?: Servico[]
+  onToggle?: (servico: Servico) => void
 }
 
-export function ServicoSelecao({ servicos, onSelecionar }: ServicoSelecaoProps) {
+export function ServicoSelecao({
+  servicos,
+  onSelecionar,
+  multiplo,
+  selecionados = [],
+  onToggle,
+}: ServicoSelecaoProps) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {servicos.map((servico) => {
         const cores = CORES_SERVICO_CLASSES[servico.cor]
+        const selecionado = multiplo && selecionados.some((s) => s.id === servico.id)
         return (
           <button
             key={servico.id}
             type="button"
-            onClick={() => onSelecionar(servico)}
-            className="flex flex-col overflow-hidden rounded-xl border border-border bg-card text-left transition-shadow hover:shadow-md"
+            onClick={() => (multiplo ? onToggle?.(servico) : onSelecionar(servico))}
+            className={cn(
+              "relative flex flex-col overflow-hidden rounded-xl border bg-card text-left transition-shadow hover:shadow-md",
+              selecionado ? "border-primary ring-1 ring-primary" : "border-border"
+            )}
           >
+            {selecionado && (
+              <span className="absolute top-2 right-2 z-10 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                <Check className="size-3.5" />
+              </span>
+            )}
             {servico.foto && (
               <img
                 src={servico.foto}

@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react"
 import { CheckCircle2 } from "lucide-react"
 import gsap from "gsap"
 import { Button } from "@/components/ui/button"
-import { formatarDataExibicao, formatarPrecoServico } from "@/lib/formatacao"
+import { formatarDataExibicao, formatarPrecoTotalServicos, nomesServicos } from "@/lib/formatacao"
 import type { Agendamento } from "@/types"
 
 interface ConfirmacaoAgendamentoProps {
@@ -64,8 +64,10 @@ export function ConfirmacaoAgendamento({
         className="w-full max-w-xs rounded-xl border border-border bg-card p-4 text-left text-sm"
       >
         <div className="flex justify-between py-1">
-          <span className="text-muted-foreground">Serviço</span>
-          <span className="font-medium">{agendamento.servico.nome}</span>
+          <span className="text-muted-foreground">
+            {agendamento.servicos.length > 1 ? "Serviços" : "Serviço"}
+          </span>
+          <span className="font-medium">{nomesServicos(agendamento.servicos)}</span>
         </div>
         {agendamento.profissional_nome && (
           <div className="flex justify-between py-1">
@@ -83,9 +85,7 @@ export function ConfirmacaoAgendamento({
         </div>
         <div className="flex justify-between py-1">
           <span className="text-muted-foreground">Valor</span>
-          <span className="font-medium">
-            {formatarPrecoServico(agendamento.servico.preco, agendamento.servico.preco_a_partir)}
-          </span>
+          <span className="font-medium">{formatarPrecoTotalServicos(agendamento.servicos)}</span>
         </div>
       </div>
 

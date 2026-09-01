@@ -11,16 +11,18 @@ import (
 // ProximoHorarioDisponivel procura, a partir de apartirDe (exclusive — o
 // primeiro candidato é o próximo dia que cai no mesmo dia da semana que
 // diaSemanaAlvo), até semanasMax semanas à frente, pelo primeiro dia em que
-// [hora, hora+duração) está livre na agenda do profissional indicado — usada
-// pelo aviso automático de reagendamento (ver internal/reagendamento) pra
-// tentar reaproveitar o mesmo horário do último agendamento do cliente.
-// Mesma conta conservadora da disponibilidade pública (nunca considera
-// ConcluidoEm). Devolve nil (sem erro) quando não encontra nenhum horário
-// livre dentro da janela.
+// [hora, hora+duracaoMin) está livre na agenda do profissional indicado —
+// usada pelo aviso automático de reagendamento (ver internal/reagendamento)
+// pra tentar reaproveitar o mesmo horário do último agendamento do cliente.
+// duracaoMin já vem somado quando o agendamento original tinha mais de um
+// serviço (ver Agendamento.DuracaoTotalEfetivaMin). Mesma conta
+// conservadora da disponibilidade pública (nunca considera ConcluidoEm).
+// Devolve nil (sem erro) quando não encontra nenhum horário livre dentro da
+// janela.
 func ProximoHorarioDisponivel(
 	db *gorm.DB,
 	estabelecimentoID, profissionalID uint,
-	servico models.Servico,
+	duracaoMin int,
 	diaSemanaAlvo time.Weekday,
 	hora string,
 	apartirDe time.Time,
@@ -40,7 +42,7 @@ func ProximoHorarioDisponivel(
 	if err != nil {
 		return nil, err
 	}
-	duracao := servico.DuracaoEfetivaMin()
+	duracao := duracaoMin
 
 	diasAteAlvo := (int(diaSemanaAlvo) - int(apartirDe.Weekday()) + 7) % 7
 	if diasAteAlvo == 0 {

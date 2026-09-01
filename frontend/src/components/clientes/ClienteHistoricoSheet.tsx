@@ -6,7 +6,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { useHistoricoCliente } from "@/hooks/useHistoricoCliente"
-import { formatarDataExibicao, formatarPrecoServico } from "@/lib/formatacao"
+import { formatarDataExibicao, formatarPrecoTotalServicos, nomesServicos } from "@/lib/formatacao"
 import { CORES_SERVICO_CLASSES } from "@/lib/cores"
 import { DynamicIcon } from "@/lib/icons"
 import { cn } from "@/lib/utils"
@@ -62,10 +62,10 @@ export function ClienteHistoricoSheet({ cliente, onOpenChange }: ClienteHistoric
                         <DynamicIcon name={ag.servico.icone} className={cn("size-4", cores.text)} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{ag.servico.nome}</p>
+                        <p className="truncate font-medium">{nomesServicos(ag.servicos)}</p>
                         <p className="text-sm text-muted-foreground">
                           {formatarDataExibicao(ag.data)} às {ag.hora} ·{" "}
-                          {formatarPrecoServico(ag.servico.preco, ag.servico.preco_a_partir)}
+                          {formatarPrecoTotalServicos(ag.servicos)}
                         </p>
                         {ag.profissional_nome && (
                           <p className="text-xs text-muted-foreground">

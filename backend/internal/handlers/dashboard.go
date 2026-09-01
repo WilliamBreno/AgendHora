@@ -22,16 +22,17 @@ func formatarReais(valor float64) string {
 }
 
 // valorAgendamento é o valor de faturamento de um agendamento: usa
-// ValorFinal quando preenchido, senão o preço do serviço — vale pra
-// qualquer estabelecimento, não é exclusivo de nenhum segmento (ver
-// CLAUDE.md "Segmentos de negócio"). Sem nenhum dos dois (serviço "a
-// combinar" ainda não fechado), conta como 0 no faturamento.
+// ValorFinal quando preenchido, senão a soma do preço de TODOS os serviços
+// do agendamento (ver Agendamento.PrecoTotal — um só, no caso mais comum)
+// — vale pra qualquer estabelecimento, não é exclusivo de nenhum segmento
+// (ver CLAUDE.md "Segmentos de negócio"). Sem nenhum dos dois (algum
+// serviço "a combinar" ainda não fechado), conta como 0 no faturamento.
 func valorAgendamento(a models.Agendamento) float64 {
 	if a.ValorFinal != nil {
 		return *a.ValorFinal
 	}
-	if a.Servico.Preco != nil {
-		return *a.Servico.Preco
+	if preco := a.PrecoTotal(); preco != nil {
+		return *preco
 	}
 	return 0
 }
@@ -42,7 +43,7 @@ func valorAgendamento(a models.Agendamento) float64 {
 // valorAgendamento usada no resto do dashboard, em vez de duplicá-la lá.
 func ResumoSemana(db *gorm.DB, estabelecimentoID uint, inicio, fim time.Time) (faturamento float64, quantidade int, err error) {
 	var agendamentos []models.Agendamento
-	err = db.Preload("Servico").
+	err = db.Preload("Servico").Preload("ServicosAdicionais.Servico").
 		Where(
 			"estabelecimento_id = ? AND status = ? AND data >= ? AND data <= ?",
 			estabelecimentoID, models.StatusConfirmado, inicio, fim,
@@ -68,7 +69,7 @@ func SugestaoPrincipal(db *gorm.DB, estabelecimentoID uint) (titulo, descricao s
 	inicioJanela := hoje.AddDate(0, 0, -60)
 
 	var agendamentos []models.Agendamento
-	err := db.Preload("Servico").
+	err := db.Preload("Servico").Preload("ServicosAdicionais.Servico").
 		Where(
 			"estabelecimento_id = ? AND status = ? AND data >= ? AND data <= ?",
 			estabelecimentoID, models.StatusConfirmado, inicioJanela, fimMes,
@@ -251,7 +252,7 @@ func (h *DashboardHandler) Get(c *gin.Context) {
 	fimMes := inicioMes.AddDate(0, 1, -1)
 	inicioJanela := hoje.AddDate(0, 0, -60)
 
-	query := h.DB.Preload("Servico").
+	query := h.DB.Preload("Servico").Preload("ServicosAdicionais.Servico").
 		Where(
 			"estabelecimento_id = ? AND status = ? AND data >= ? AND data <= ?",
 			estabelecimentoID, models.StatusConfirmado, inicioJanela, fimMes,
@@ -334,7 +335,7 @@ func (h *DashboardHandler) agendamentosParaExportar(c *gin.Context) ([]models.Ag
 		return nil, fmt.Errorf("parâmetro 'periodo' inválido — use hoje, semana ou mes")
 	}
 
-	query := h.DB.Preload("Servico").Preload("Cliente").
+	query := h.DB.Preload("Servico").Preload("ServicosAdicionais.Servico").Preload("Cliente").
 		Where(
 			"estabelecimento_id = ? AND status = ? AND data >= ? AND data <= ?",
 			estabelecimentoID, models.StatusConfirmado, inicio, fim,
@@ -368,7 +369,7 @@ func (h *DashboardHandler) CSV(c *gin.Context) {
 		writer.Write([]string{
 			a.Data.Format("02/01/2006"),
 			a.Cliente.Nome,
-			a.Servico.Nome,
+			nomesServicos(a.TodosServicos()),
 			formatarReais(valorAgendamento(a)),
 			simOuNao(a.Pago),
 		})
@@ -410,7 +411,7 @@ func (h *DashboardHandler) XLSX(c *gin.Context) {
 	for _, a := range agendamentos {
 		f.SetCellValue(aba, fmt.Sprintf("A%d", linha), a.Data.Format("02/01/2006"))
 		f.SetCellValue(aba, fmt.Sprintf("B%d", linha), a.Cliente.Nome)
-		f.SetCellValue(aba, fmt.Sprintf("C%d", linha), a.Servico.Nome)
+		f.SetCellValue(aba, fmt.Sprintf("C%d", linha), nomesServicos(a.TodosServicos()))
 		f.SetCellValue(aba, fmt.Sprintf("D%d", linha), valorAgendamento(a))
 		f.SetCellStyle(aba, fmt.Sprintf("D%d", linha), fmt.Sprintf("D%d", linha), estiloMoeda)
 		f.SetCellValue(aba, fmt.Sprintf("E%d", linha), simOuNao(a.Pago))
@@ -489,7 +490,7 @@ func (h *DashboardHandler) PDF(c *gin.Context) {
 		linhaCor = !linhaCor
 		pdf.CellFormat(larguras[0], 7, a.Data.Format("02/01/2006"), "1", 0, "L", true, 0, "")
 		pdf.CellFormat(larguras[1], 7, transliterar(a.Cliente.Nome), "1", 0, "L", true, 0, "")
-		pdf.CellFormat(larguras[2], 7, transliterar(a.Servico.Nome), "1", 0, "L", true, 0, "")
+		pdf.CellFormat(larguras[2], 7, transliterar(nomesServicos(a.TodosServicos())), "1", 0, "L", true, 0, "")
 		pdf.CellFormat(larguras[3], 7, transliterar(formatarReais(valorAgendamento(a))), "1", 0, "R", true, 0, "")
 		pdf.CellFormat(larguras[4], 7, simOuNao(a.Pago), "1", 0, "C", true, 0, "")
 		pdf.Ln(-1)
@@ -629,19 +630,61 @@ func graficoFaturamento(agendamentos []models.Agendamento, hoje time.Time, dias 
 	return pontos
 }
 
+// valorPorServico rateia o valor total de UM agendamento entre os serviços
+// que ele tem — proporcional ao preço de catálogo de cada um (quem custa
+// mais leva uma fatia maior), ou dividido em partes iguais quando nenhum
+// serviço do agendamento tem preço cadastrado (não há nenhum sinal pra
+// ratear por peso). No caso mais comum — um serviço só — devolve o valor
+// inteiro pra ele, exatamente como antes de existir agendamento combo.
+func valorPorServico(a models.Agendamento) map[uint]float64 {
+	servicos := a.TodosServicos()
+	resultado := make(map[uint]float64, len(servicos))
+	if len(servicos) == 0 {
+		return resultado
+	}
+
+	total := valorAgendamento(a)
+	var somaPesos float64
+	pesos := make(map[uint]float64, len(servicos))
+	for _, s := range servicos {
+		peso := 0.0
+		if s.Preco != nil {
+			peso = *s.Preco
+		}
+		pesos[s.ID] += peso
+		somaPesos += peso
+	}
+
+	for _, s := range servicos {
+		if somaPesos > 0 {
+			resultado[s.ID] += total * (pesos[s.ID] / somaPesos)
+		} else {
+			resultado[s.ID] += total / float64(len(servicos))
+		}
+	}
+	return resultado
+}
+
+// ranking conta quantas vezes cada serviço apareceu (em qualquer
+// agendamento, principal ou adicional) e quanto rateado ele faturou — ver
+// valorPorServico. Um agendamento com 2 serviços conta 1 pra cada um, não 2
+// pro mesmo agendamento.
 func ranking(agendamentos []models.Agendamento, inicio, fim time.Time) ([]rankingItem, []rankingItem) {
 	porServico := map[uint]*rankingItem{}
 	for _, a := range agendamentos {
 		if a.Data.Before(inicio) || a.Data.After(fim) {
 			continue
 		}
-		item, ok := porServico[a.ServicoID]
-		if !ok {
-			item = &rankingItem{ServicoID: a.ServicoID, Nome: a.Servico.Nome, Cor: a.Servico.Cor}
-			porServico[a.ServicoID] = item
+		alocado := valorPorServico(a)
+		for _, s := range a.TodosServicos() {
+			item, ok := porServico[s.ID]
+			if !ok {
+				item = &rankingItem{ServicoID: s.ID, Nome: s.Nome, Cor: s.Cor}
+				porServico[s.ID] = item
+			}
+			item.Quantidade++
+			item.Faturamento += alocado[s.ID]
 		}
-		item.Quantidade++
-		item.Faturamento += valorAgendamento(a)
 	}
 
 	lista := make([]rankingItem, 0, len(porServico))
@@ -676,7 +719,7 @@ func duracaoMediaMinutos(agendamentos []models.Agendamento) float64 {
 	}
 	var soma int
 	for _, a := range agendamentos {
-		soma += a.Servico.DuracaoEfetivaMin()
+		soma += a.DuracaoTotalEfetivaMin()
 	}
 	return float64(soma) / float64(len(agendamentos))
 }
@@ -703,7 +746,7 @@ func ocupacaoNoPeriodo(agendamentos []models.Agendamento, horarios models.Horari
 		if a.Data.Before(inicio) || a.Data.After(fim) {
 			continue
 		}
-		ocupado += float64(a.Servico.DuracaoEfetivaMin())
+		ocupado += float64(a.DuracaoTotalEfetivaMin())
 	}
 	return disponivel, ocupado
 }
@@ -764,8 +807,10 @@ func servicoParaPromover(agendamentos []models.Agendamento, inicio, fim time.Tim
 		if a.Data.Before(inicio) || a.Data.After(fim) {
 			continue
 		}
-		porServico[a.ServicoID]++
-		nomePorServico[a.ServicoID] = a.Servico.Nome
+		for _, s := range a.TodosServicos() {
+			porServico[s.ID]++
+			nomePorServico[s.ID] = s.Nome
+		}
 	}
 	if len(porServico) < 2 {
 		return "", 0, 0, "", false

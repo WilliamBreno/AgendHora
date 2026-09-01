@@ -29,10 +29,14 @@ type agendamentoInput struct {
 	ClienteTelefone string `json:"cliente_telefone" binding:"required"`
 	ClienteEmail    string `json:"cliente_email"`
 	ServicoID       uint   `json:"servico_id" binding:"required"`
-	ProfissionalID  uint   `json:"profissional_id" binding:"required"`
-	Data            string `json:"data" binding:"required"` // "2006-01-02"
-	Hora            string `json:"hora" binding:"required"` // "15:04"
-	Observacoes     string `json:"observacoes"`
+	// ServicosAdicionaisIDs é opcional — serviços ALÉM do principal, pro
+	// mesmo horário (ver CLAUDE.md "Agendamento com mais de um serviço").
+	// Vazio (caso mais comum) = um serviço só, comportamento de sempre.
+	ServicosAdicionaisIDs []uint `json:"servicos_adicionais_ids"`
+	ProfissionalID        uint   `json:"profissional_id" binding:"required"`
+	Data                  string `json:"data" binding:"required"` // "2006-01-02"
+	Hora                  string `json:"hora" binding:"required"` // "15:04"
+	Observacoes           string `json:"observacoes"`
 	// Encaixe, quando true, autoriza criar mesmo com conflito de horário
 	// detectado (ver comentário no model). Só é respeitado em criação feita
 	// pelo admin — a rota pública nunca aceita encaixe.
@@ -55,13 +59,18 @@ type agendamentoInput struct {
 // mesmo formato plano de antes (o frontend não precisa mudar nada) — só
 // passaram a vir de a.Cliente, não mais de colunas soltas no Agendamento.
 type agendamentoResponse struct {
-	ID                uint                     `json:"id"`
-	ClienteID         uint                     `json:"cliente_id"`
-	ClienteNome       string                   `json:"cliente_nome"`
-	ClienteTelefone   string                   `json:"cliente_telefone"`
-	ClienteEmail      string                   `json:"cliente_email"`
-	ServicoID         uint                     `json:"servico_id"`
-	Servico           models.Servico           `json:"servico"`
+	ID              uint           `json:"id"`
+	ClienteID       uint           `json:"cliente_id"`
+	ClienteNome     string         `json:"cliente_nome"`
+	ClienteTelefone string         `json:"cliente_telefone"`
+	ClienteEmail    string         `json:"cliente_email"`
+	ServicoID       uint           `json:"servico_id"`
+	Servico         models.Servico `json:"servico"`
+	// Servicos é a lista completa (o principal primeiro, seguido dos
+	// adicionais) — usar isso pra mostrar "Corte + Barba" etc. servico/
+	// servico_id continuam existindo com só o principal, pra não quebrar
+	// nada que já lia um agendamento de serviço único.
+	Servicos          []models.Servico         `json:"servicos"`
 	ProfissionalID    uint                     `json:"profissional_id"`
 	ProfissionalNome  string                   `json:"profissional_nome"`
 	Data              string                   `json:"data"`
@@ -89,6 +98,7 @@ func toAgendamentoResponse(a models.Agendamento) agendamentoResponse {
 		ClienteEmail:      a.Cliente.Email,
 		ServicoID:         a.ServicoID,
 		Servico:           a.Servico,
+		Servicos:          a.TodosServicos(),
 		ProfissionalID:    a.ProfissionalID,
 		ProfissionalNome:  a.Profissional.Nome,
 		Data:              a.Data.Format("2006-01-02"),
@@ -169,6 +179,32 @@ func apenasDigitos(s string) string {
 	return sb.String()
 }
 
+// nomesServicos junta os nomes de todos os serviços de um agendamento — usado
+// em e-mails, histórico de atividades e relatórios pra mostrar "Corte +
+// Barba" em vez de só o serviço principal (ver CLAUDE.md "Agendamento com
+// mais de um serviço").
+func nomesServicos(servicos []models.Servico) string {
+	nomes := make([]string, len(servicos))
+	for i, s := range servicos {
+		nomes[i] = s.Nome
+	}
+	return strings.Join(nomes, " + ")
+}
+
+// validarCombinacaoServicos garante que todo serviço escolhido pode de fato
+// ser feito pelo profissional do agendamento — serviço do catálogo geral
+// (ProfissionalID nil) serve com qualquer um; um serviço individual (ver
+// CLAUDE.md "Serviços individuais") só combina com o próprio profissional
+// dele, nunca com outro. Devolve uma mensagem de erro, ou "" quando válido.
+func validarCombinacaoServicos(servicos []models.Servico, profissionalID uint) string {
+	for _, s := range servicos {
+		if s.ProfissionalID != nil && *s.ProfissionalID != profissionalID {
+			return fmt.Sprintf("o serviço \"%s\" só pode ser agendado com o profissional dele — escolha serviços compatíveis com o mesmo profissional", s.Nome)
+		}
+	}
+	return ""
+}
+
 type intervaloOcupado struct {
 	inicio      int
 	fim         int
@@ -195,7 +231,7 @@ func sobrepoe(aInicio, aFim, bInicio, bFim int) bool {
 // Função livre (não presa a AgendamentoHandler) porque o motor de
 // disponibilidade também precisa dela.
 func intervalosOcupados(db *gorm.DB, estabelecimentoID, profissionalID uint, data time.Time, ignorarID uint, considerarConcluido bool) ([]intervaloOcupado, error) {
-	query := db.Preload("Servico").Preload("Cliente").
+	query := db.Preload("Servico").Preload("ServicosAdicionais.Servico").Preload("Cliente").
 		Where(
 			"estabelecimento_id = ? AND profissional_id = ? AND data = ? AND status = ?",
 			estabelecimentoID, profissionalID, data, models.StatusConfirmado,
@@ -215,7 +251,7 @@ func intervalosOcupados(db *gorm.DB, estabelecimentoID, profissionalID uint, dat
 		if err != nil {
 			continue
 		}
-		fim := inicio + ag.Servico.DuracaoEfetivaMin()
+		fim := inicio + ag.DuracaoTotalEfetivaMin()
 		if considerarConcluido && ag.ConcluidoEm != nil {
 			concluidoMin := ag.ConcluidoEm.Hour()*60 + ag.ConcluidoEm.Minute()
 			if concluidoMin < fim {
@@ -224,7 +260,7 @@ func intervalosOcupados(db *gorm.DB, estabelecimentoID, profissionalID uint, dat
 		}
 		intervalos = append(intervalos, intervaloOcupado{
 			inicio: inicio, fim: fim,
-			clienteNome: ag.Cliente.Nome, servicoNome: ag.Servico.Nome,
+			clienteNome: ag.Cliente.Nome, servicoNome: nomesServicos(ag.TodosServicos()),
 		})
 	}
 	return intervalos, nil
@@ -270,7 +306,7 @@ func (h *AgendamentoHandler) haConflito(estabelecimentoID, profissionalID uint, 
 }
 
 func (h *AgendamentoHandler) List(c *gin.Context) {
-	query := h.DB.Preload("Servico").Preload("Profissional").Preload("Cliente").
+	query := h.DB.Preload("Servico").Preload("ServicosAdicionais.Servico").Preload("Profissional").Preload("Cliente").
 		Where("estabelecimento_id = ?", auth.EstabelecimentoID(c))
 
 	// um auxiliar só vê a própria agenda, nunca a dos colegas; o dono vê
@@ -327,7 +363,7 @@ func (h *AgendamentoHandler) MeusAgendamentos(c *gin.Context) {
 	}
 
 	var agendamentos []models.Agendamento
-	err := h.DB.Preload("Servico").Preload("Profissional").Preload("Cliente").
+	err := h.DB.Preload("Servico").Preload("ServicosAdicionais.Servico").Preload("Profissional").Preload("Cliente").
 		Joins("JOIN clientes ON clientes.id = agendamentos.cliente_id").
 		Where(
 			"agendamentos.estabelecimento_id = ? AND regexp_replace(clientes.telefone, '[^0-9]', '', 'g') = ?",
@@ -383,6 +419,33 @@ func (h *AgendamentoHandler) criar(c *gin.Context, permitirAdmin bool) {
 		return
 	}
 
+	// ServicosAdicionaisIDs é opcional — agendamento com mais de um serviço
+	// (ver CLAUDE.md). Dedupe e exclui o próprio principal, pra não criar um
+	// vínculo redundante se o cliente marcar o mesmo serviço duas vezes.
+	var servicosAdicionais []models.Servico
+	idsAdicionaisUnicos := make(map[uint]bool)
+	for _, id := range input.ServicosAdicionaisIDs {
+		if id != input.ServicoID {
+			idsAdicionaisUnicos[id] = true
+		}
+	}
+	if len(idsAdicionaisUnicos) > 0 {
+		idsUnicos := make([]uint, 0, len(idsAdicionaisUnicos))
+		for id := range idsAdicionaisUnicos {
+			idsUnicos = append(idsUnicos, id)
+		}
+		if err := h.DB.Where("id IN ? AND estabelecimento_id = ?", idsUnicos, estabelecimentoID).
+			Find(&servicosAdicionais).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao buscar serviços adicionais"})
+			return
+		}
+		if len(servicosAdicionais) != len(idsUnicos) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "um ou mais serviços adicionais não foram encontrados"})
+			return
+		}
+	}
+	todosServicos := append([]models.Servico{servico}, servicosAdicionais...)
+
 	profissionalID := input.ProfissionalID
 	if permitirAdmin && auth.Papel(c) == models.PapelAuxiliar {
 		profissionalID = auth.UsuarioID(c)
@@ -396,11 +459,21 @@ func (h *AgendamentoHandler) criar(c *gin.Context, permitirAdmin bool) {
 		return
 	}
 
+	if msg := validarCombinacaoServicos(todosServicos, profissionalID); msg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+		return
+	}
+
+	duracaoTotal := 0
+	for _, s := range todosServicos {
+		duracaoTotal += s.DuracaoEfetivaMin()
+	}
+
 	// considerarConcluido = permitirAdmin: só o admin se beneficia de um
 	// atendimento concluído antes do fim oficial liberar o horário — a rota
 	// pública continua sempre conservadora (ver CLAUDE.md "Encaixe de
 	// horários").
-	conflito, err := h.haConflito(estabelecimentoID, profissionalID, data, input.Hora, servico.DuracaoEfetivaMin(), 0, permitirAdmin)
+	conflito, err := h.haConflito(estabelecimentoID, profissionalID, data, input.Hora, duracaoTotal, 0, permitirAdmin)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao verificar disponibilidade"})
 		return
@@ -441,12 +514,32 @@ func (h *AgendamentoHandler) criar(c *gin.Context, permitirAdmin bool) {
 		agendamento.ValorSinal = input.ValorSinal
 		agendamento.SinalPago = input.SinalPago
 	}
-	if err := h.DB.Create(&agendamento).Error; err != nil {
+
+	// cria o agendamento e os vínculos dos serviços adicionais numa
+	// transação só — ou os dois passam, ou nenhum (evita um agendamento
+	// órfão sem os serviços extras se a segunda escrita falhar).
+	err = h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&agendamento).Error; err != nil {
+			return err
+		}
+		for _, s := range servicosAdicionais {
+			item := models.AgendamentoServico{AgendamentoID: agendamento.ID, ServicoID: s.ID}
+			if err := tx.Create(&item).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao criar agendamento"})
 		return
 	}
 	agendamento.Cliente = *cliente
 	agendamento.Servico = servico
+	agendamento.ServicosAdicionais = make([]models.AgendamentoServico, len(servicosAdicionais))
+	for i, s := range servicosAdicionais {
+		agendamento.ServicosAdicionais[i] = models.AgendamentoServico{ServicoID: s.ID, Servico: s}
+	}
 	h.DB.First(&agendamento.Profissional, profissionalID)
 
 	if h.Notificador != nil {
@@ -463,7 +556,7 @@ func (h *AgendamentoHandler) criar(c *gin.Context, permitirAdmin bool) {
 		registrarAtividade(
 			h.DB, estabelecimentoID, auth.UsuarioID(c), models.AcaoAgendamentoCriado,
 			fmt.Sprintf("Criou um agendamento de %s (%s) para %s às %s",
-				cliente.Nome, servico.Nome, data.Format("02/01/2006"), input.Hora),
+				cliente.Nome, nomesServicos(todosServicos), data.Format("02/01/2006"), input.Hora),
 		)
 	}
 
@@ -490,7 +583,7 @@ func (h *AgendamentoHandler) buscarAgendamento(c *gin.Context) (*models.Agendame
 	}
 
 	var agendamento models.Agendamento
-	err = h.DB.Preload("Servico").Preload("Profissional").Preload("Cliente").
+	err = h.DB.Preload("Servico").Preload("ServicosAdicionais.Servico").Preload("Profissional").Preload("Cliente").
 		Where("id = ? AND estabelecimento_id = ?", id, auth.EstabelecimentoID(c)).
 		First(&agendamento).Error
 	if err == gorm.ErrRecordNotFound {
@@ -540,7 +633,7 @@ func (h *AgendamentoHandler) cancelar(c *gin.Context, agendamento *models.Agenda
 			registrarAtividade(
 				h.DB, agendamento.EstabelecimentoID, *logarComoUsuarioID, models.AcaoAgendamentoCancelado,
 				fmt.Sprintf("Cancelou o agendamento de %s (%s) em %s às %s",
-					agendamento.Cliente.Nome, agendamento.Servico.Nome,
+					agendamento.Cliente.Nome, nomesServicos(agendamento.TodosServicos()),
 					agendamento.Data.Format("02/01/2006"), agendamento.Hora),
 			)
 		}
@@ -601,7 +694,7 @@ func (h *AgendamentoHandler) AtualizarPago(c *gin.Context) {
 	if marcandoComoPago {
 		registrarAtividade(
 			h.DB, agendamento.EstabelecimentoID, auth.UsuarioID(c), models.AcaoAgendamentoPago,
-			fmt.Sprintf("Marcou como pago: %s (%s)", agendamento.Cliente.Nome, agendamento.Servico.Nome),
+			fmt.Sprintf("Marcou como pago: %s (%s)", agendamento.Cliente.Nome, nomesServicos(agendamento.TodosServicos())),
 		)
 	}
 
@@ -736,7 +829,7 @@ func (h *AgendamentoHandler) Reagendar(c *gin.Context) {
 	// considerarConcluido é sempre true — ver CLAUDE.md "Encaixe de horários".
 	conflito, err := h.haConflito(
 		agendamento.EstabelecimentoID, agendamento.ProfissionalID,
-		data, input.Hora, agendamento.Servico.DuracaoEfetivaMin(), agendamento.ID, true,
+		data, input.Hora, agendamento.DuracaoTotalEfetivaMin(), agendamento.ID, true,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao verificar disponibilidade"})

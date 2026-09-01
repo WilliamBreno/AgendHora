@@ -128,7 +128,7 @@ func enviarAviso(
 	estabelecimento models.Estabelecimento, cliente models.Cliente, ultimaData, hoje time.Time,
 ) {
 	var ultimoAgendamento models.Agendamento
-	err := db.Preload("Servico").
+	err := db.Preload("Servico").Preload("ServicosAdicionais.Servico").
 		Where(
 			"cliente_id = ? AND estabelecimento_id = ? AND status = ? AND data = ?",
 			cliente.ID, estabelecimento.ID, models.StatusConfirmado, ultimaData,
@@ -146,7 +146,7 @@ func enviarAviso(
 	// agendamento — se não achar nada livre nas próximas semanas, o e-mail
 	// cai num link genérico de agendar, sem nada pré-selecionado.
 	sugestaoData, err := handlers.ProximoHorarioDisponivel(
-		db, estabelecimento.ID, ultimoAgendamento.ProfissionalID, ultimoAgendamento.Servico,
+		db, estabelecimento.ID, ultimoAgendamento.ProfissionalID, ultimoAgendamento.DuracaoTotalEfetivaMin(),
 		ultimaData.Weekday(), ultimoAgendamento.Hora, hoje, semanasBuscaSugestao,
 	)
 	if err != nil {
@@ -181,7 +181,12 @@ func montarLink(frontendURL, slug string, agendamento models.Agendamento, client
 		return base
 	}
 	valores := url.Values{}
-	valores.Set("servico_id", strconv.FormatUint(uint64(agendamento.ServicoID), 10))
+	// servico_id repete na query string quando o agendamento original tinha
+	// mais de um serviço (ver CLAUDE.md "Agendamento com mais de um
+	// serviço") — a página pública lê todas as ocorrências.
+	for _, s := range agendamento.TodosServicos() {
+		valores.Add("servico_id", strconv.FormatUint(uint64(s.ID), 10))
+	}
 	valores.Set("profissional_id", strconv.FormatUint(uint64(agendamento.ProfissionalID), 10))
 	valores.Set("data", sugestaoData.Format("2006-01-02"))
 	valores.Set("hora", agendamento.Hora)

@@ -45,6 +45,18 @@ func tabelaDetalhes(linhas ...string) string {
 	return html
 }
 
+// nomesServicos junta os nomes de todos os serviços de um agendamento —
+// "Corte + Barba" em vez de mostrar só o principal quando há mais de um
+// (ver CLAUDE.md "Agendamento com mais de um serviço").
+func nomesServicos(agendamento models.Agendamento) string {
+	servicos := agendamento.TodosServicos()
+	nomes := make([]string, len(servicos))
+	for i, s := range servicos {
+		nomes[i] = s.Nome
+	}
+	return strings.Join(nomes, " + ")
+}
+
 func emailClienteHTML(estabelecimento models.Estabelecimento, agendamento models.Agendamento, dataFormatada string) string {
 	corpo := fmt.Sprintf(
 		`<p style="font-size:15px;margin:0 0 4px;">Olá, %s!</p>
@@ -52,7 +64,7 @@ func emailClienteHTML(estabelecimento models.Estabelecimento, agendamento models
 		agendamento.Cliente.Nome, estabelecimento.Nome,
 	)
 	corpo += tabelaDetalhes(
-		linhaDetalhe("Serviço", agendamento.Servico.Nome),
+		linhaDetalhe("Serviço", nomesServicos(agendamento)),
 		linhaDetalhe("Data", dataFormatada),
 		linhaDetalhe("Horário", agendamento.Hora),
 	)
@@ -65,7 +77,7 @@ func emailDonoHTML(estabelecimento models.Estabelecimento, agendamento models.Ag
 	corpo += tabelaDetalhes(
 		linhaDetalhe("Cliente", agendamento.Cliente.Nome),
 		linhaDetalhe("Telefone", agendamento.Cliente.Telefone),
-		linhaDetalhe("Serviço", agendamento.Servico.Nome),
+		linhaDetalhe("Serviço", nomesServicos(agendamento)),
 		linhaDetalhe("Data", dataFormatada),
 		linhaDetalhe("Horário", agendamento.Hora),
 	)
@@ -93,7 +105,7 @@ func emailLembreteHTML(estabelecimento models.Estabelecimento, agendamento model
 		agendamento.Cliente.Nome, estabelecimento.Nome,
 	)
 	corpo += tabelaDetalhes(
-		linhaDetalhe("Serviço", agendamento.Servico.Nome),
+		linhaDetalhe("Serviço", nomesServicos(agendamento)),
 		linhaDetalhe("Data", dataFormatada),
 		linhaDetalhe("Horário", agendamento.Hora),
 	)
@@ -107,7 +119,7 @@ func emailLembreteFinalHTML(estabelecimento models.Estabelecimento, agendamento 
 		agendamento.Cliente.Nome, estabelecimento.Nome,
 	)
 	corpo += tabelaDetalhes(
-		linhaDetalhe("Serviço", agendamento.Servico.Nome),
+		linhaDetalhe("Serviço", nomesServicos(agendamento)),
 		linhaDetalhe("Data", dataFormatada),
 		linhaDetalhe("Horário", agendamento.Hora),
 	)
@@ -199,7 +211,7 @@ func emailCancelamentoHTML(estabelecimento models.Estabelecimento, agendamento m
 		agendamento.Cliente.Nome, estabelecimento.Nome,
 	)
 	corpo += tabelaDetalhes(
-		linhaDetalhe("Serviço", agendamento.Servico.Nome),
+		linhaDetalhe("Serviço", nomesServicos(agendamento)),
 		linhaDetalhe("Data", dataFormatada),
 		linhaDetalhe("Horário", agendamento.Hora),
 	)

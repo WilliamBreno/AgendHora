@@ -36,6 +36,7 @@ func Migrate(db *gorm.DB) {
 		&models.Servico{},
 		&models.Cliente{},
 		&models.Agendamento{},
+		&models.AgendamentoServico{},
 		&models.ConviteProfissional{},
 		&models.Bloqueio{},
 		&models.EmailIsento{},

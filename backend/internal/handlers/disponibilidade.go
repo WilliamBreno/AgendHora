@@ -50,8 +50,11 @@ func (h *DisponibilidadeHandler) ListarAdmin(c *gin.Context) {
 }
 
 func (h *DisponibilidadeHandler) listar(c *gin.Context, considerarConcluido bool) {
-	servicoID, err := strconv.ParseUint(c.Query("servico_id"), 10, 64)
-	if err != nil {
+	// servico_id pode repetir na query string quando o agendamento tem mais
+	// de um serviço (ver CLAUDE.md "Agendamento com mais de um serviço") —
+	// mesma convenção já usada por profissional_id no filtro do dashboard.
+	servicoIDsStr := c.QueryArray("servico_id")
+	if len(servicoIDsStr) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "parâmetro 'servico_id' inválido"})
 		return
 	}
@@ -68,14 +71,17 @@ func (h *DisponibilidadeHandler) listar(c *gin.Context, considerarConcluido bool
 
 	estabelecimentoID := auth.EstabelecimentoID(c)
 
-	var servico models.Servico
-	err = h.DB.Where("id = ? AND estabelecimento_id = ?", servicoID, estabelecimentoID).First(&servico).Error
-	if err == gorm.ErrRecordNotFound {
+	var servicos []models.Servico
+	if err := h.DB.Where("id IN ? AND estabelecimento_id = ?", servicoIDsStr, estabelecimentoID).Find(&servicos).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao buscar serviço"})
+		return
+	}
+	if len(servicos) != len(servicoIDsStr) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "serviço não encontrado"})
 		return
 	}
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao buscar serviço"})
+	if msg := validarCombinacaoServicos(servicos, uint(profissionalID)); msg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": msg})
 		return
 	}
 
@@ -151,7 +157,10 @@ func (h *DisponibilidadeHandler) listar(c *gin.Context, considerarConcluido bool
 		limiteHoje = agora.Hour()*60 + agora.Minute()
 	}
 
-	duracaoEfetiva := servico.DuracaoEfetivaMin()
+	duracaoEfetiva := 0
+	for _, s := range servicos {
+		duracaoEfetiva += s.DuracaoEfetivaMin()
+	}
 
 	disponiveis := make([]string, 0)
 	for inicio := abre; inicio+duracaoEfetiva <= fecha; inicio += passoMinutos {

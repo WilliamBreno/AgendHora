@@ -25,6 +25,44 @@ export function formatarDuracaoServico(min: number, maxMin: number | null) {
   return `de ${formatarDuracao(min)} a ${formatarDuracao(maxMin)}`
 }
 
+// duracaoEfetivaMin espelha models.Servico.DuracaoEfetivaMin do backend — a
+// duração que de fato bloqueia a agenda (o teto da faixa, quando o serviço
+// tem duração variável, nunca o mínimo). Usada pra somar a duração de um
+// combo de serviços antes de consultar disponibilidade (ver CLAUDE.md
+// "Agendamento com mais de um serviço").
+export function duracaoEfetivaMin(servico: { duracao_min: number; duracao_max_min: number | null }) {
+  if (servico.duracao_max_min !== null && servico.duracao_max_min > servico.duracao_min) {
+    return servico.duracao_max_min
+  }
+  return servico.duracao_min
+}
+
+// precoTotalServicos soma o preço de uma lista de serviços — null se
+// QUALQUER um deles não tiver preço cadastrado ("a combinar" pesa mais que
+// qualquer soma parcial, pra nunca mostrar um valor incompleto). Espelha
+// Agendamento.PrecoTotal do backend.
+export function precoTotalServicos(servicos: { preco: number | null }[]): number | null {
+  let total = 0
+  for (const s of servicos) {
+    if (s.preco === null) return null
+    total += s.preco
+  }
+  return total
+}
+
+// formatarPrecoTotalServicos é o formatarPrecoServico de uma lista de
+// serviços — mesma regra de "A combinar" quando algum não tem preço.
+export function formatarPrecoTotalServicos(servicos: { preco: number | null }[]) {
+  const total = precoTotalServicos(servicos)
+  return total === null ? "A combinar" : formatarPreco(total)
+}
+
+// nomesServicos junta os nomes de uma lista de serviços — "Corte + Barba"
+// em vez de mostrar só o principal quando o agendamento tem mais de um.
+export function nomesServicos(servicos: { nome: string }[]) {
+  return servicos.map((s) => s.nome).join(" + ")
+}
+
 export function formatarDataExibicao(data: string) {
   const [ano, mes, dia] = data.split("-").map(Number)
   const texto = new Date(ano, mes - 1, dia).toLocaleDateString("pt-BR", {

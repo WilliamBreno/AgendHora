@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { HorarioSelecao } from "@/components/public/HorarioSelecao"
 import { useDisponibilidadeAdmin } from "@/hooks/useDisponibilidadeAdmin"
 import { ApiError } from "@/lib/api"
+import { nomesServicos } from "@/lib/formatacao"
 import type { Agendamento, ConflitoAgendamento } from "@/types"
 
 interface ReagendarDialogProps {
@@ -37,7 +38,7 @@ export function ReagendarDialog({
   const [conflito, setConflito] = useState<ConflitoAgendamento | null>(null)
 
   const { horarios, loading } = useDisponibilidadeAdmin(
-    agendamento?.servico_id ?? null,
+    agendamento?.servicos.map((s) => s.id) ?? [],
     agendamento?.profissional_id ?? null,
     data
   )
@@ -80,7 +81,7 @@ export function ReagendarDialog({
         <DialogHeader>
           <DialogTitle>Reagendar</DialogTitle>
           <DialogDescription>
-            {agendamento.cliente_nome} · {agendamento.servico.nome}
+            {agendamento.cliente_nome} · {nomesServicos(agendamento.servicos)}
           </DialogDescription>
         </DialogHeader>
 

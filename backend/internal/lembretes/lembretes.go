@@ -71,6 +71,7 @@ func verificarJanela(
 	err := db.
 		Preload("Cliente").
 		Preload("Servico").
+		Preload("ServicosAdicionais.Servico").
 		Where("status = ? AND "+campoEnviado+" = ? AND data BETWEEN ? AND ?",
 			models.StatusConfirmado, false, hoje, hoje.Add(48*time.Hour)).
 		Find(&candidatos).Error
