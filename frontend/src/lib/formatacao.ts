@@ -18,6 +18,13 @@ export function formatarDuracao(min: number) {
   return resto === 0 ? `${horas}h` : `${horas}h${resto}min`
 }
 
+// Serviços com duração variável (ver CLAUDE.md "Duração variável de
+// serviço") mostram "de X a Y" no lugar de uma duração fixa.
+export function formatarDuracaoServico(min: number, maxMin: number | null) {
+  if (maxMin === null || maxMin <= min) return formatarDuracao(min)
+  return `de ${formatarDuracao(min)} a ${formatarDuracao(maxMin)}`
+}
+
 export function formatarDataExibicao(data: string) {
   const [ano, mes, dia] = data.split("-").map(Number)
   const texto = new Date(ano, mes - 1, dia).toLocaleDateString("pt-BR", {

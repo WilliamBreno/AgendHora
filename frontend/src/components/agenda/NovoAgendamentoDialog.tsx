@@ -25,6 +25,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext"
 import { ApiError } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { formatarDuracaoServico } from "@/lib/formatacao"
 import type { AgendamentoInput, ConflitoAgendamento, Servico, Usuario } from "@/types"
 
 interface NovoAgendamentoDialogProps {
@@ -190,14 +191,16 @@ export function NovoAgendamentoDialog({
                   <SelectValue placeholder="Selecione um serviço">
                     {(value: string | null) => {
                       const servico = servicos.find((s) => String(s.id) === value)
-                      return servico ? `${servico.nome} · ${servico.duracao_min} min` : null
+                      return servico
+                        ? `${servico.nome} · ${formatarDuracaoServico(servico.duracao_min, servico.duracao_max_min)}`
+                        : null
                     }}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {servicos.map((s) => (
                     <SelectItem key={s.id} value={String(s.id)}>
-                      {s.nome} · {s.duracao_min} min
+                      {s.nome} · {formatarDuracaoServico(s.duracao_min, s.duracao_max_min)}
                     </SelectItem>
                   ))}
                 </SelectContent>

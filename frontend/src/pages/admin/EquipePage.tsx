@@ -1,23 +1,87 @@
 import { useState, type FormEvent } from "react"
-import { Copy, Mail, UserPlus } from "lucide-react"
+import {
+  CalendarPlus,
+  CalendarX,
+  Copy,
+  DollarSign,
+  Mail,
+  ShieldCheck,
+  Sparkles,
+  UserPlus,
+} from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useEquipe } from "@/hooks/useEquipe"
+import { useAtividades } from "@/hooks/useAtividades"
+import { useAuth } from "@/contexts/AuthContext"
 import { ApiError } from "@/lib/api"
+import type { AcaoAtividade, Usuario } from "@/types"
 
 function copiarLink(link: string) {
   navigator.clipboard.writeText(link)
   toast.success("Link copiado — pode mandar por WhatsApp, SMS, onde preferir.")
 }
 
+const ICONE_ATIVIDADE: Record<AcaoAtividade, typeof CalendarPlus> = {
+  servico_criado: Sparkles,
+  agendamento_criado: CalendarPlus,
+  agendamento_cancelado: CalendarX,
+  agendamento_pago: DollarSign,
+}
+
+function formatarDataHoraAtividade(iso: string) {
+  return new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
 export function EquipePage() {
-  const { equipe, loading, convidar } = useEquipe()
+  const { usuario } = useAuth()
+  const { equipe, loading, convidar, atualizarPapel, atualizarPermissoes } = useEquipe()
+  const { atividades, loading: carregandoAtividades } = useAtividades()
   const [email, setEmail] = useState("")
   const [telefone, setTelefone] = useState("")
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
+  const [alterandoId, setAlterandoId] = useState<number | null>(null)
+
+  async function handleAlternarPapel(membro: Usuario) {
+    const novoPapel = membro.papel === "dono" ? "auxiliar" : "dono"
+    setAlterandoId(membro.id)
+    try {
+      await atualizarPapel(membro.id, novoPapel)
+      toast.success(
+        novoPapel === "dono"
+          ? `${membro.nome} agora tem acesso total, igual ao dono. Peça pra essa pessoa sair e entrar de novo pra a mudança valer.`
+          : `${membro.nome} voltou a ser auxiliar. Peça pra essa pessoa sair e entrar de novo pra a mudança valer.`
+      )
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Erro ao alterar permissão")
+    } finally {
+      setAlterandoId(null)
+    }
+  }
+
+  async function handleAlternarServicoIndividual(membro: Usuario, valor: boolean) {
+    setAlterandoId(membro.id)
+    try {
+      await atualizarPermissoes(membro.id, valor)
+      toast.success(
+        valor
+          ? `${membro.nome} agora pode cadastrar um serviço individual.`
+          : `${membro.nome} não pode mais cadastrar serviço individual.`
+      )
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Erro ao alterar permissão")
+    } finally {
+      setAlterandoId(null)
+    }
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -91,20 +155,51 @@ export function EquipePage() {
             <p className="text-sm text-muted-foreground">Carregando...</p>
           ) : (
             <>
-              {equipe.profissionais.map((p) => (
-                <div
-                  key={p.id}
-                  className="flex items-center justify-between rounded-lg border border-border px-4 py-3"
-                >
-                  <div>
-                    <p className="font-medium">{p.nome}</p>
-                    <p className="text-sm text-muted-foreground">{p.email}</p>
+              {equipe.profissionais.map((p) => {
+                const ehVoceMesmo = p.id === usuario?.id
+                return (
+                  <div
+                    key={p.id}
+                    className="flex flex-col gap-3 rounded-lg border border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <p className="font-medium">
+                        {p.nome} {ehVoceMesmo && <span className="text-muted-foreground">(você)</span>}
+                      </p>
+                      <p className="text-sm text-muted-foreground">{p.email}</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {!ehVoceMesmo && p.papel === "auxiliar" && (
+                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={p.pode_cadastrar_servico_individual}
+                            disabled={alterandoId === p.id}
+                            onChange={(e) => handleAlternarServicoIndividual(p, e.target.checked)}
+                            className="size-3.5 rounded border-input accent-primary"
+                          />
+                          Pode cadastrar serviço individual
+                        </label>
+                      )}
+                      <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                        {p.papel === "dono" ? "Dono" : "Auxiliar"}
+                      </span>
+                      {!ehVoceMesmo && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={alterandoId === p.id}
+                          onClick={() => handleAlternarPapel(p)}
+                        >
+                          <ShieldCheck className="size-4" />
+                          {p.papel === "dono" ? "Rebaixar a auxiliar" : "Promover a dono"}
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                  <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                    {p.papel === "dono" ? "Dono" : "Auxiliar"}
-                  </span>
-                </div>
-              ))}
+                )
+              })}
 
               {equipe.convites_pendentes.length > 0 && (
                 <div className="mt-2 flex flex-col gap-2">
@@ -131,6 +226,37 @@ export function EquipePage() {
                 </div>
               )}
             </>
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="font-heading font-medium">Atividades recentes</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Quem cadastrou serviço, criou agendamento pelo painel, cancelou ou marcou como pago.
+        </p>
+        <div className="mt-4 flex flex-col gap-2">
+          {carregandoAtividades ? (
+            <p className="text-sm text-muted-foreground">Carregando...</p>
+          ) : atividades.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhuma atividade registrada ainda.</p>
+          ) : (
+            atividades.map((atividade) => {
+              const Icone = ICONE_ATIVIDADE[atividade.acao]
+              return (
+                <div key={atividade.id} className="flex items-start gap-3 rounded-lg px-2 py-2">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                    <Icone className="size-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm">{atividade.descricao}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {atividade.usuario?.nome ?? "Alguém"} · {formatarDataHoraAtividade(atividade.created_at)}
+                    </p>
+                  </div>
+                </div>
+              )
+            })
           )}
         </div>
       </section>

@@ -16,12 +16,17 @@ import { ServicoCard } from "@/components/servicos/ServicoCard"
 import { ServicoFormDialog } from "@/components/servicos/ServicoFormDialog"
 import { useServicos } from "@/hooks/useServicos"
 import { useEstabelecimento } from "@/hooks/useEstabelecimento"
+import { useEquipe } from "@/hooks/useEquipe"
+import { useAuth } from "@/contexts/AuthContext"
 import { ApiError } from "@/lib/api"
 import type { Servico, ServicoInput } from "@/types"
 
 export function ServicosPage() {
+  const { ehDono, usuario } = useAuth()
   const { servicos, loading, criar, atualizar, excluir } = useServicos()
   const { estabelecimento } = useEstabelecimento()
+  const { equipe } = useEquipe(ehDono)
+  const profissionais = equipe?.profissionais ?? []
 
   const [formAberto, setFormAberto] = useState(false)
   const [servicoEmEdicao, setServicoEmEdicao] = useState<Servico | null>(null)
@@ -116,6 +121,9 @@ export function ServicosPage() {
         onOpenChange={setFormAberto}
         servico={servicoEmEdicao}
         iconesDisponiveis={estabelecimento?.icones_padrao ?? []}
+        ehDono={ehDono}
+        usuarioAtual={usuario}
+        profissionais={profissionais}
         onSubmit={salvar}
       />
 

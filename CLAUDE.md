@@ -22,7 +22,7 @@ CLAUDE.md    → este arquivo
 - **Backend**: Go (Gin) + GORM + PostgreSQL
 - **Frontend**: React 19 + TypeScript + Vite + Tailwind + shadcn/ui (Base UI, não Radix) + lucide-react
 - **Animação**: GSAP para as transições da agenda (troca de mês, abertura do painel de detalhe, stagger de listas de agendamentos). Magic UI só em 1–2 pontos pontuais de destaque (ex: contador animado no dashboard), nunca no fluxo operacional principal — mantém a área admin rápida e limpa.
-- **Notificações**: Resend (e-mail) por enquanto — mesmo serviço já usado no projeto Drenux, implementar como service layer própria deste projeto, não importar código do Drenux. WhatsApp (whatsmeow) fica pra depois, ver "Decisões que não mudar sem repensar"
+- **Notificações**: Brevo (e-mail, API transacional REST direta, sem SDK) — já implementado como service layer própria (`internal/notifications`), padrão nil-safe (sem `BREVO_API_KEY`, o `Notificador` é `nil` e todo envio vira no-op em vez de travar o boot). WhatsApp fica pra depois — ver "Integração futura com WhatsApp" e "Decisões que não mudar sem repensar"
 
 ## Escopo desta primeira versão
 
@@ -41,13 +41,15 @@ Isso não é um recomeço: o modelo de dados abaixo já guardava `estabeleciment
 
 ## Modelo de dados
 
-- **Estabelecimento**: nome, `slug` (identifica a URL pública do estabelecimento), telefone, endereço (opcional), horário de funcionamento por dia da semana, `plano` (string, hoje sempre `"padrao"`), `ativo` (booleano, controla acesso enquanto a cobrança é manual), `isento` (booleano, separado de `ativo` — marca quem nunca deve ser cobrado, ver "Isenção de pagamento"), `proximo_vencimento` (data, ver "Renovação mensal"), `segmento` (string, padrão `"geral"` — ver "Segmentos de negócio"), `icones_padrao`
+- **Estabelecimento**: nome, `slug` (identifica a URL pública do estabelecimento), telefone, endereço (opcional), horário de funcionamento por dia da semana, `plano` (string, hoje sempre `"padrao"`), `ativo` (booleano, controla acesso enquanto a cobrança é manual), `isento` (booleano, separado de `ativo` — marca quem nunca deve ser cobrado, ver "Isenção de pagamento"), `proximo_vencimento` (data, ver "Renovação mensal"), `segmento` (string, padrão `"geral"` — ver "Segmentos de negócio"), `icones_padrao`, `desconto_profissional_percentual` (opcional — ver "Cadastro de produtos"), `dias_reagendamento` (opcional — ver "Reagendamento automático")
 - **EmailIsento**: email (normalizado), estabelecimento_id (nulo até ser usado), criado_em — não pertence a nenhum estabelecimento, é uma lista global gerenciada só pelo dono do projeto (lista configurável de nomes de ícones lucide-react disponíveis no cadastro de serviço — ver seção "Ícones dos serviços")
-- **Usuario** (login): email, senha (hash), `papel` (`dono` | `auxiliar`), horário de trabalho, estabelecimento_id — auxiliares são convidados por e-mail e viram "profissionais" com login e agenda próprios (confirmado já implementado no código real; não criar uma tabela `Profissional` separada)
-- **Servico**: nome, preco (opcional — ver "Segmentos de negócio"), duracao_min, descricao, cor (chave de uma paleta fixa — ver abaixo), icone, estabelecimento_id
-- **Cliente**: nome, telefone (identifica o cliente dentro do estabelecimento), `data_nascimento` (opcional), estabelecimento_id — criado/atualizado automaticamente a cada novo agendamento, sem precisar de cadastro manual separado
-- **Agendamento**: cliente_id, servico_id, profissional_id (referencia `Usuario`, não uma tabela `Profissional` separada), data, hora, status (`pendente` | `confirmado` | `cancelado`), pago (booleano), `valor_final` (opcional, sobrescreve o preço do serviço no faturamento), `valor_sinal` (opcional) + `sinal_pago` (booleano), `link_referencia` (opcional), `concluido_em` (data/hora, opcional — ver "Encaixe de horários"), observacoes, estabelecimento_id
+- **Usuario** (login): email, senha (hash), `papel` (`dono` | `auxiliar` — promovível/rebaixável pelo dono, ver "Profissionais"), horário de trabalho, `pode_cadastrar_servico_individual` (booleano — ver "Serviços individuais"), estabelecimento_id — auxiliares são convidados por e-mail e viram "profissionais" com login e agenda próprios (confirmado já implementado no código real; não criar uma tabela `Profissional` separada)
+- **Servico**: nome, preco (opcional — ver "Segmentos de negócio"), duracao_min, `duracao_max_min` (opcional — ver "Duração variável de serviço"), descricao, cor (chave de uma paleta fixa — ver abaixo), icone, `profissional_id` (opcional — ver "Serviços individuais"), estabelecimento_id
+- **Cliente**: nome, telefone (identifica o cliente dentro do estabelecimento), `data_nascimento` (opcional), estabelecimento_id — criado/atualizado automaticamente a cada novo agendamento, sem precisar de cadastro manual separado; guarda também `ultimo_aviso_reagendamento_em` (controle interno, não exibido — ver "Reagendamento automático")
+- **Agendamento**: cliente_id, servico_id, profissional_id (referencia `Usuario`, não uma tabela `Profissional` separada), data, hora, status (`pendente` | `confirmado` | `cancelado`), pago (booleano), `valor_final` (opcional, sobrescreve o preço do serviço no faturamento), `valor_sinal` (opcional) + `sinal_pago` (booleano), `link_referencia` (opcional), `concluido_em` (data/hora, opcional — ver "Encaixe de horários"), `lembrete_enviado` + `lembrete_final_enviado` (controle interno dos dois lembretes automáticos — ver "Lembretes automáticos"), observacoes, estabelecimento_id
 - **Bloqueio**: data, hora_inicio, hora_fim (nulo = dia inteiro), motivo (opcional), profissional_id (nulo = bloqueia o estabelecimento inteiro), estabelecimento_id — usado pra folga, almoço, férias etc.; entra no mesmo cálculo de disponibilidade que já existe pros agendamentos, não é um sistema separado
+- **Produto** / **VendaProduto**: catálogo com estoque + vendas pra cliente final ou compra interna de profissional — ver "Cadastro de produtos"
+- **RegistroAtividade**: histórico simples de ações da equipe (usuario_id, acao, descricao já pronta em texto), visível só pro dono na tela Equipe — ver "Histórico de atividades"
 
 Como o sistema é multi-tenant, **toda consulta ao banco precisa filtrar por `estabelecimento_id`** (vindo do JWT do admin logado, ou do estabelecimento selecionado na página pública) — nunca listar ou buscar sem esse filtro. Vale considerar um middleware que injeta esse filtro automaticamente, pra não depender de lembrar disso em cada rota nova.
 
@@ -86,10 +88,10 @@ Dúvida resolvida: **ninguém precisa confirmar manualmente** no fluxo padrão. 
 - **Filtro de profissional na agenda com multi-seleção** (ver vários ou todos ao mesmo tempo) — **só visível pra quem tem `papel = dono`**; um auxiliar (`papel = auxiliar`) não vê esse controle, só a própria agenda, já que não faz sentido ele escolher ver outros profissionais
 - Clicar num agendamento abre um **painel lateral** com: cliente (nome, telefone), profissional responsável, serviço, data/hora, duração, preço, status, se já está pago, observações
 - Ações no painel de detalhe: cancelar, reagendar (ver seção "Bloqueio de horários e reagendamento"), marcar como pago, e aceitar/recusar só se o modo opcional de aprovação manual estiver ativado
-- **Cadastro de serviços**: listagem em cards com barra de cor lateral; criar/editar/excluir; campos nome, preço, duração, descrição, cor (paleta fixa de 6) e ícone
+- **Cadastro de serviços**: listagem em cards com barra de cor lateral; criar/editar/excluir; campos nome, preço, duração (fixa ou variável — ver "Duração variável de serviço"), descrição, cor (paleta fixa de 6) e ícone
 
 ### 3. Notificações
-- **Só e-mail por enquanto (Resend)** — confirmação pro cliente assim que agenda, e aviso pro dono a cada novo agendamento. WhatsApp (whatsmeow) fica de fora deste momento por decisão do dono do projeto — ver "Decisões que não mudar sem repensar"
+- **Só e-mail por enquanto (Brevo)** — confirmação pro cliente assim que agenda, e aviso pro dono a cada novo agendamento. WhatsApp fica de fora deste momento por decisão do dono do projeto — ver "Integração futura com WhatsApp" (mapa já desenhado, só falta a ação manual do dono no Meta Business) e "Decisões que não mudar sem repensar"
 
 ### 4. Dashboard (visão geral do estabelecimento)
 - **Dropdown de profissional com multi-seleção** (ver todos ou alguns) filtrando todas as métricas abaixo — mesma regra da agenda: **só visível pro dono**; auxiliar vê só os próprios números, sem esse controle
@@ -101,6 +103,9 @@ Dúvida resolvida: **ninguém precisa confirmar manualmente** no fluxo padrão. 
   - Se o faturamento estiver caindo de um período pro outro (semana vs. semana passada, mês vs. mês passado): apontar em qual dia da semana a queda é maior
   - Se já estiver indo bem (ocupação alta, faturamento estável ou crescendo): trocar o tom de alerta por incentivo — mostrar o teto real de faturamento se a ocupação chegasse a 100%, ou quanto o ritmo atual projeta pro fim do mês
   - Regra importante: nunca mostrar sugestão de "melhorar" quando já está indo bem. Nesse caso, mostrar só o potencial de ganho mais alto, como reforço positivo — não deve soar como cobrança
+  - **Serviço com procura fraca**: compara, dentro do mês corrente, a quantidade de agendamentos de cada serviço — se o mais fraco está abaixo de 60% da média dos outros (e há pelo menos 2 serviços diferentes no período, senão não há com o que comparar), sugere uma promoção nele: desconto por tempo limitado ou combo junto do serviço mais procurado (citado pelo nome, não é texto genérico). Tom muda conforme o contexto: se já existe outro alerta na mesma passada, essa sugestão também vira alerta; se o resto está indo bem, vira "oportunidade de crescer ainda mais", nunca soando como problema
+  - **Funciona automaticamente por profissional**: o motor roda em cima da lista de agendamentos que já chega filtrada por quem chama (`aplicarFiltroProfissional`) — então o dono já consegue comparar "cada profissional e ele mesmo" bastando selecionar UM profissional de cada vez no filtro que já existe no Dashboard (o próprio dono também aparece nessa lista, já que é um `Usuario`/profissional agendável como qualquer outro). Não foi criada nenhuma tela nova nem cálculo lado a lado — é a mesma sugestão de sempre, só que escopada
+  - Coberto por testes automatizados (`internal/handlers/dashboard_sugestoes_test.go`) cobrindo casos-limite: sem histórico, um serviço só, empate, diferença pequena que não deve disparar, três serviços com exclusão correta do próprio fraco na média, filtro de período, e ausência de NaN/Inf em qualquer cenário
 
 ## Ferramentas no dashboard
 
@@ -122,6 +127,35 @@ Existe um protótipo funcional em React (`agenda-estabelecimento.jsx`, entregue 
 - Não criar a tabela `Profissional` separada — é redundante com `Usuario`/`Papel`, que já resolve isso e já está em uso pelo fluxo inteiro (convite, agenda própria, disponibilidade)
 - O comportamento de "só mostrar seletor de profissional na página pública quando há mais de um ativo" já parece estar implementado (Claude Code mencionou "disponibilidade pública com seleção de profissional") — confirmar antes de mexer, não reconstruir
 - Segue sem limite de quantidade de auxiliares por enquanto, mesma lógica de antes (só um plano, tudo incluso)
+
+### Promover/rebaixar (acesso total de um auxiliar)
+
+O dono pode dar a um auxiliar específico acesso total, igual o dele — não é uma permissão granular nova, é literalmente mudar `Usuario.Papel` pra `dono` (reversível a qualquer momento pela mesma tela). Reaproveita 100% das travas de `ExigirDono()` que já existem (Equipe, Configurações, Bloqueios, multi-seleção de profissional) — nenhuma tela precisou de lógica de permissão nova.
+
+- Botão "Promover a dono" / "Rebaixar a auxiliar" em cada linha da tela Equipe, visível só pro dono
+- Nunca aceita mudar o próprio papel por essa rota (`PATCH /admin/profissionais/:id/papel`) — evita o dono se rebaixar sem querer e o estabelecimento ficar sem ninguém com acesso total
+- **Importante**: o JWT já emitido carrega o papel no momento do login e dura 30 dias — quem for promovido/rebaixado só vê o efeito depois de sair e entrar de novo. A tela já avisa isso no toast de confirmação
+
+### Serviços individuais
+
+Por padrão, `Servico` continua sendo do catálogo geral (comportamento de sempre: qualquer auxiliar pode criar/editar, visível pra clientes escolherem com qualquer profissional). A novidade é **aditiva**, não troca esse comportamento: um auxiliar pode, opcionalmente, cadastrar um serviço vinculado só a ele mesmo.
+
+- **`Servico.ProfissionalID`** (opcional, aponta pra `Usuario`): `nil` = catálogo geral (padrão); preenchido = serviço individual, só existe pra aquele profissional
+- **`Usuario.PodeCadastrarServicoIndividual`** (booleano, concedido pelo dono na tela Equipe): sem essa permissão, um auxiliar só consegue criar serviço no catálogo geral, exatamente como hoje — a permissão só adiciona a opção de marcar "serviço individual (só seu)", nunca restringe o que já funcionava
+- Um auxiliar com a permissão só pode vincular o serviço a si mesmo, nunca a um colega (validado no backend); o dono pode atribuir livremente a qualquer profissional da equipe, sem precisar da permissão (o dono já pode tudo)
+- **Página pública**: serviço individual pula o passo de "escolher profissional" — o cliente nem sabe que existem outros, o profissional já vem implícito. Mostra um selo "Só com [Nome]" no card do serviço
+- Resolve a pergunta original que motivou essa feature: hoje, sem essa marcação, um serviço cadastrado por QUALQUER pessoa (dono ou auxiliar) aparece pra todo mundo escolher com qualquer profissional — só fica exclusivo de alguém quando explicitamente marcado como individual
+
+## Histórico de atividades
+
+O dono vê, numa seção nova dentro da própria tela Equipe, um histórico simples (`RegistroAtividade`, últimos 100) de quatro ações específicas — não é um log genérico de auditoria de tudo que acontece no sistema:
+
+- Quem cadastrou um serviço (dono ou auxiliar — a descrição já deixa claro quem foi)
+- Quem criou um agendamento pelo painel admin (não conta o self-service da página pública, que não é "ação de um profissional")
+- Quem cancelou um agendamento pelo painel (idem — cancelamento feito pelo próprio cliente na página pública não entra)
+- Quem marcou um agendamento como pago (só a transição pra pago conta; desmarcar não gera entrada nova)
+
+Cada linha já vem com a descrição pronta em texto (ex: "Cadastrou o serviço "Corte Masculino""), congelada no momento do registro — não depende de join nenhum depois, então continua legível mesmo que o serviço seja renomeado ou o agendamento role pra fora do período visível em outro lugar do sistema.
 
 ## Clientes
 
@@ -158,9 +192,42 @@ Os dois caminhos discutidos (aviso ao criar manualmente, e conclusão antecipada
 
 ## Lembretes automáticos
 
-- Envio de e-mail (Resend) algumas horas antes do horário marcado, lembrando o cliente do agendamento — **só e-mail por enquanto**, sem WhatsApp (ver decisão abaixo)
-- Precisa de uma tarefa agendada (cron) rodando diariamente/de hora em hora pra verificar quais agendamentos estão próximos e ainda não receberam lembrete — é a primeira peça de infraestrutura do projeto que não é só "responder a um pedido HTTP", vale planejar como um serviço/rotina separada do resto da API
+- **Dois lembretes por e-mail (Brevo)**, não um só: o primeiro sai 3h antes do horário marcado, o segundo 30 minutos antes — cada um com seu próprio controle de duplicidade (`Agendamento.lembrete_enviado` e `lembrete_final_enviado`, dois booleanos separados) pra um não pisar no outro. **Só e-mail por enquanto**, sem WhatsApp (ver "Integração futura com WhatsApp")
+- Cron próprio (`internal/lembretes`), sem lib externa — um laço em goroutine que acorda a cada 15 minutos e verifica as duas janelas de antecedência (3h e 30min) numa passada só. É a primeira peça de infraestrutura do projeto que não é só "responder a um pedido HTTP" — mesmo padrão reaproveitado depois por `internal/renovacao`, `internal/resumosemanal` e `internal/reagendamento`
 - **Resumo semanal por e-mail pro dono**: toda segunda-feira, e-mail automático com o resumo da semana anterior — faturamento, número de agendamentos, e a sugestão do dashboard daquele momento. Objetivo é o dono saber como foi a semana sem precisar abrir o sistema. Mesma infraestrutura de cron dos lembretes, só um gatilho semanal em vez de diário
+
+## Duração variável de serviço
+
+Alguns serviços não têm uma duração fixa (ex: massagem que pode levar de 30 a 60 minutos, dependendo do cliente) — sem essa flexibilidade, o dono é forçado a cadastrar sempre o pior caso como duração fixa, superestimando o tempo de todo atendimento daquele serviço.
+
+- **`Servico.duracao_max_min`** (opcional, inteiro em minutos): `nil` = duração fixa, comportamento de sempre. Preenchido = o serviço tem uma faixa, e `duracao_min` vira o piso dela em vez de duração única. Validado no backend: só aceita `duracao_max_min > duracao_min`
+- **Quem decide a duração real de cada atendimento é sempre o profissional, na hora — não o cliente.** A página pública nunca pergunta nem deixa escolher; só mostra "de X a Y min" no card do serviço. Essa foi uma decisão deliberada pra não complicar o fluxo público com uma etapa nova nem abrir a porta pra preço variar por duração escolhida
+- **A agenda sempre bloqueia usando o teto da faixa** (`duracao_max_min`), nunca o mínimo — em qualquer serviço com faixa, o cálculo de "horário ocupado" (tanto a disponibilidade pública quanto a checagem de conflito no admin) usa `Servico.DuracaoEfetivaMin()`, que devolve o máximo quando existe. É a mesma lógica conservadora do resto do sistema: nunca dar conflito de agenda por causa de um atendimento que acabou levando mais tempo que o esperado
+- **Reaproveita o encaixe de horários já existente**: quando o profissional termina antes do teto da faixa, é só clicar em "Concluir agora" (botão que já existe, ver "Encaixe de horários") — o resto do horário libera na hora, exatamente como já acontece hoje pra duração fixa. Não foi criado nenhum mecanismo novo só pra isso
+- Motor de sugestões do dashboard (ocupação, duração média) também passou a usar `DuracaoEfetivaMin()` — consistente com o que de fato fica reservado na agenda
+
+## Cadastro de produtos
+
+Sistema básico de catálogo + financeiro simples pra produtos (ex: cosméticos, insumos) — vendidos pro cliente final (avulso ou junto de um serviço) ou comprados internamente pela equipe, com desconto opcional.
+
+- **`Produto`**: nome, preço, custo unitário (opcional — habilita cálculo de lucro), quantidade em estoque, estoque mínimo (0 desliga o alerta), ativo (desativar em vez de excluir preserva histórico de vendas), foto opcional
+- **`VendaProduto`**: registra cada saída de estoque — `tipo_comprador` (`cliente` | `profissional`), quantidade, preço e desconto **congelados no momento da venda** (mudar o preço do produto ou o desconto padrão depois não altera vendas passadas), vínculo opcional com um `Agendamento` (produto levado junto do serviço) ou com um `Cliente` avulso, `pago` e `cancelada` (cancelar devolve a quantidade pro estoque)
+- **Desconto da equipe**: `Estabelecimento.desconto_profissional_percentual` (opcional) pré-preenche automaticamente a compra interna de um profissional — configurável em Configurações, editável por venda
+- **Baixa de estoque é atômica** (`UPDATE ... WHERE quantidade_estoque >= ?`) — duas vendas concorrentes do mesmo produto nunca deixam o estoque negativo
+- **Faturamento do dashboard só conta venda pro cliente final** — compra interna de profissional (mesmo com desconto zero) nunca entra como faturamento, porque representa consumo interno, não receita do negócio. Métricas de produto no dashboard são visíveis só pro dono (venda pro cliente final não tem profissional atribuído, então não dá pra escopar corretamente pra um auxiliar)
+- **Importação em lote via PDF ou XLSX** (upload de uma lista de produtos com nome e preço): sempre passa por uma **prévia editável** antes de qualquer produto ser criado — a leitura de PDF é heurística (procura o padrão "nome ... valor" linha a linha, só funciona em PDF com texto selecionável, não em imagem escaneada) e pode errar em layouts fora do comum; XLSX é mais confiável (lê colunas por cabeçalho reconhecível — "Nome"/"Produto" e "Preço"/"Valor" — ou cai em A=nome, B=preço sem cabeçalho). Confirmar a importação casa por nome (sem diferenciar maiúsculas/acentos) dentro do estabelecimento: já existe, atualiza o preço; não existe, cria com estoque zerado
+
+## Reagendamento automático
+
+Depois de um período configurável sem o cliente agendar de novo, o sistema manda um e-mail sozinho sugerindo um novo horário — sem exigir que o dono lembre de checar quem sumiu.
+
+- **`Estabelecimento.dias_reagendamento`** (opcional, inteiro): `nil` = feature desligada (padrão). Configurável em Configurações, só pelo dono. **Separado de propósito do limiar fixo de "cliente sumido"** (60 dias, só um badge passivo na tela de Clientes) — esse aqui é um envio ativo de e-mail, e o dono pode querer disparar bem antes dos 60 dias
+- **Rotina diária** (`internal/reagendamento`, mesma infraestrutura de cron de sempre): pra cada estabelecimento com a feature ligada, acha clientes cujo último agendamento confirmado passou do limiar configurado — mesma query de "último agendamento" já usada pro cálculo de cliente sumido, só que com o limiar vindo do estabelecimento em vez de fixo
+- **Controle de duplicidade**: `Cliente.ultimo_aviso_reagendamento_em` — só dispara de novo se o cliente agendar de novo e sumir mais uma vez (não reenvia todo dia enquanto ele continuar inativo)
+- **Só alcança quem tem e-mail cadastrado** — mesma limitação do lembrete de agendamento comum; sem e-mail, não há como avisar automaticamente
+- **Reaproveitamento inteligente do último horário**: o sistema procura, nas próximas semanas, se o mesmo dia da semana e horário do último agendamento do cliente continua livre pro mesmo profissional/serviço (mesma conta conservadora de disponibilidade de sempre, nunca considera `concluido_em`). Se achar, o e-mail já vem com esse horário sugerido; se não achar em algumas semanas, cai num link genérico de agendar
+- **Decisão de segurança importante: o link do e-mail NUNCA cria o agendamento sozinho, mesmo com o horário sugerido.** Ele leva pro formulário público já com serviço/profissional/data/hora/nome/telefone pré-preenchidos (via query string), mas o cliente sempre precisa clicar em "Confirmar agendamento" — o fluxo normal de sempre, só que com menos digitação. Um link que reservasse direto ao ser aberto (GET) seria perigoso: e-mails corporativos e alguns apps pré-carregam/escaneiam links automaticamente antes da pessoa nem ver a mensagem, o que criaria agendamentos fantasmas sem ninguém ter pedido
+- Se o horário sugerido não estiver mais livre quando o cliente tentar confirmar (alguém pegou primeiro), cai no mesmo tratamento de conflito que a página pública já tem hoje — volta pro seletor de horário com um aviso, não trava
 
 ## Cadastro e ativação de novos estabelecimentos
 
@@ -244,6 +311,40 @@ Dois pontos a construir (escopo confirmado, não é mais só uma pendência):
 
 No protótipo visual que já existe, os ícones dos serviços de exemplo foram escolhidos manualmente, um por um, direto no código, sem seletor nem tela de configuração — serve só de referência do visual dos cards, não da funcionalidade em si.
 
+## Integração futura com WhatsApp (mapa de implementação)
+
+WhatsApp continua fora do escopo ativo por decisão do dono do projeto (ver "Decisões que não mudar sem repensar") — mas o caminho pra ligar quando fizer sentido já está mapeado aqui, pra não perder o que foi decidido. Caminho escolhido: **API oficial da Meta (WhatsApp Cloud API), direto, sem provedor intermediário (BSP)** — mesmo espírito de "uma credencial só" que já usamos com o handle da InfinitePay, sem mensalidade extra de terceiro.
+
+### O que só o dono do projeto pode fazer (ações fora do código)
+
+Nenhuma dessas etapas depende de código — são todas no painel da Meta. Até elas estarem prontas, a implementação técnica abaixo não tem como ser testada de verdade.
+
+1. **Ter (ou criar) uma conta no Meta Business Suite** (business.facebook.com) em nome do AgendHora
+2. **Verificar o negócio** ("Business verification") — a Meta pede documentos da empresa; sem isso, o número fica limitado a poucas conversas/dia
+3. **Criar um app em developers.facebook.com**, tipo "Business", e adicionar o produto **WhatsApp** a esse app
+4. **Cadastrar um número de telefone** pro WhatsApp Business Platform — **não pode ser um número já em uso no WhatsApp comum ou WhatsApp Business App** (precisa "sair" de lá antes, ou usar um número novo). Pra testar antes de migrar o número real, a Meta libera um número de teste temporário
+5. **Criar os templates de mensagem** (um por tipo de notificação — ver lista abaixo) no painel "WhatsApp Manager" > "Modelos de mensagem", categoria **Utility**. Cada template precisa ser aprovado pela Meta antes de poder ser usado (geralmente minutos, às vezes até 1–2 dias) — esse é o gargalo mais provável, então vale criar os templates com antecedência
+6. **Gerar um token de acesso permanente**: no "Business Settings" > "Usuários do sistema" ("System users"), criar um usuário do sistema com permissão nesse app, e gerar um token **sem expiração** (o token de teste que aparece direto no painel do app expira em 24h — não serve pra produção)
+7. **Anotar 3 valores** do painel do WhatsApp (aba "API Setup" do app): `Phone Number ID`, `WhatsApp Business Account ID` (WABA ID), e o token gerado no passo 6
+8. **Escolher uma string qualquer** pra ser o "Webhook Verify Token" (a Meta exige um webhook configurado mesmo só pra mandar mensagem, não só pra receber) — qualquer senha aleatória serve, é só pra confirmar que o backend é dono do webhook
+
+Confira o preço vigente na documentação oficial antes de decidir o número — a Meta cobra por conversa iniciada (não por mensagem individual), com uma cota mensal de conversas gratuitas em categoria *utility* que muda de tempos em tempos.
+
+### O que eu (Claude Code) faço depois que os 3 valores acima existirem
+
+Só dá pra implementar de verdade depois do passo 7 acima — sem token/phone_number_id reais não tem como testar. Quando estiver pronto, é isto:
+
+1. **4 novas variáveis de ambiente** em `config.go`: `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_BUSINESS_ACCOUNT_ID`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN` — seguindo o mesmo padrão do resto do `Config`: variável vazia desliga a feature sem travar o boot
+2. **Novo pacote `internal/whatsapp`**, espelhando exatamente o padrão nil-safe do `internal/notifications` de hoje: `New(token, phoneNumberID string) *Cliente` devolve `nil` se `token == ""`, e todo método começa com `if c == nil { return }` — chamar em qualquer lugar do código continua seguro mesmo com WhatsApp desligado
+3. **Um template por tipo de notificação já existente** — cada `NotificarXxx` do `Notificador` (confirmação, cancelamento, lembrete 3h, lembrete 30min, reagendamento) ganha um envio equivalente por WhatsApp, usando o `Phone Number ID` + template aprovado + variáveis (`{{1}}`, `{{2}}`...) preenchidas com nome do cliente/serviço/data/hora — a API da Meta só aceita template fora da janela de 24h de conversa ativa, texto livre não funciona pra mensagem iniciada pelo negócio
+4. **Rota pública `POST /webhooks/whatsapp`** (fora de `/api`, igual `/webhooks/infinitepay` hoje) — a Meta exige isso mesmo só pra enviar; recebe status de entrega/leitura e a validação de assinatura (`X-Hub-Signature-256`). Uma segunda rota `GET /webhooks/whatsapp` faz o handshake de verificação inicial (devolve o `hub.challenge` se o `hub.verify_token` bater com `WHATSAPP_WEBHOOK_VERIFY_TOKEN`)
+5. **`Cliente.Telefone` já existe e já é o dado necessário** — nenhuma migration nova pra isso, só precisa normalizar pro formato E.164 (`55` + DDD + número, sem símbolos) na hora de montar a chamada
+6. Cada `NotificarXxx` passa a mandar e-mail **e** WhatsApp (quando configurado) — não um no lugar do outro; o texto de cada canal pode divergir levemente (WhatsApp é mais curto/direto), mas a decisão de quando disparar continua sendo a mesma dos dois lados
+
+### Templates a criar no painel (nomes sugeridos, pra já ir preparando)
+
+`agendamento_confirmado`, `agendamento_cancelado`, `lembrete_3h`, `lembrete_30min`, `aviso_reagendamento` — todos categoria **Utility** (não *Marketing*, que tem regra de opt-in mais rígida e custo maior).
+
 ## Fases sugeridas
 
 1. Setup do repositório (backend Go + frontend Vite), banco de dados e migrations — já incluindo `estabelecimento_id` em todas as tabelas e o filtro multi-tenant desde o primeiro CRUD
@@ -262,6 +363,11 @@ No protótipo visual que já existe, os ícones dos serviços de exemplo foram e
 13. Isenção de pagamento: login de plataforma separado, entidade EmailIsento, tela de gerenciar a lista, checagem no cadastro
 14. Segmentos de negócio: campo `segmento` no Estabelecimento, `preco` opcional no Servico, `valor_final`/`valor_sinal`/`sinal_pago`/`link_referencia` no Agendamento, faturamento usando `valor_final` quando existir, telas ajustando destaque conforme o segmento
 15. Multi-seleção de profissional na agenda e no dashboard (só pro dono); clientes sumidos (60 dias) na tela de Clientes; resumo semanal por e-mail (cron); encaixe de horários (`concluido_em`, aviso não-bloqueante no admin, página pública inalterada)
+16. Cadastro de produtos: `Produto`/`VendaProduto`, estoque atômico, compra interna de profissional com desconto configurável, importação em lote via PDF/XLSX com prévia editável
+17. Duração variável de serviço (`Servico.duracao_max_min`), sempre bloqueando pelo teto da faixa
+18. Segundo lembrete automático (30 min antes, além do de 3h já existente) e reagendamento automático por inatividade (`Estabelecimento.dias_reagendamento`, reaproveitamento inteligente do último horário, sempre com confirmação manual do cliente)
+19. Integração com WhatsApp (Cloud API da Meta) — mapa técnico pronto (ver "Integração futura com WhatsApp"), implementação real depende de ações manuais do dono do projeto no Meta Business primeiro
+20. Promover/rebaixar auxiliar (acesso total, reversível); serviços individuais (`Servico.ProfissionalID` + `Usuario.PodeCadastrarServicoIndividual`, aditivo); histórico de atividades da equipe na tela Equipe; sugestão de promoção por serviço fraco no motor de sugestões (funciona por profissional reaproveitando o filtro já existente no Dashboard)
 
 ## Decisões que não mudar sem repensar
 
@@ -273,7 +379,7 @@ No protótipo visual que já existe, os ícones dos serviços de exemplo foram e
 - Ícones disponíveis no cadastro de serviço vêm de uma lista configurável pelo dono (`icones_padrao`), não de um array fixo no código
 - Sugestões do dashboard vêm de regras determinísticas sobre dados reais do próprio estabelecimento, não de IA generativa — mantém previsível, explicável e sem custo de API
 - Profissional é o próprio `Usuario` com `papel` auxiliar (login, agenda e horário próprios) — confirmado já implementado; não criar tabela `Profissional` separada
-- WhatsApp (confirmação e lembretes) fica de fora por decisão do dono do projeto — notificações são só por e-mail até segunda ordem
+- WhatsApp (confirmação e lembretes) fica de fora por decisão do dono do projeto — notificações são só por e-mail até segunda ordem. O caminho técnico já está mapeado (ver "Integração futura com WhatsApp"), mas as ações de configuração no Meta Business são manuais e ficam com o dono do projeto — a implementação de código só começa depois delas
 - Integração com Google Agenda ficou fora desta rodada de melhorias — é a peça mais cara de construir (OAuth, API externa, tokens por estabelecimento) e a que menos diferencia o produto pro público-alvo (autônomos/pequenos negócios) comparado a ter a experiência principal rápida e bem feita; reavaliar quando o produto já tiver clientes pagantes validando o resto
 - Quando `Estabelecimento.ativo = false`, bloqueia tudo — admin e página pública — não só o admin
 - Login de plataforma (isenção de pagamento) é uma conta separada de `Usuario`/`Estabelecimento`, sem cadastro público — só pro dono do projeto
@@ -285,3 +391,11 @@ No protótipo visual que já existe, os ícones dos serviços de exemplo foram e
 - Renovação mensal: vencimento é sempre `data do último pagamento + 30 dias` (não uma data fixa de calendário) — quem paga atrasado não perde dias de acesso
 - Multi-seleção de profissional (agenda e dashboard) é visível só pro dono — auxiliar não escolhe ver outros profissionais
 - Encaixe de horário é sempre um aviso, nunca um bloqueio, e só existe no admin — a página pública continua sempre conservadora, mesmo quando o profissional já registrou conclusão antecipada de um atendimento anterior
+- Duração variável de serviço: só o profissional decide a duração real, na hora (via "Concluir agora") — o cliente nunca escolhe na página pública, e a agenda sempre bloqueia pelo teto da faixa, nunca pelo mínimo
+- Importação de produtos (PDF/XLSX) sempre passa por uma prévia editável antes de salvar qualquer coisa — nunca cria produto direto a partir do arquivo, porque a leitura de PDF é heurística e pode errar
+- Faturamento de produtos só conta venda pro cliente final — compra interna de profissional nunca conta como receita, mesmo sem desconto nenhum
+- O e-mail de reagendamento automático nunca cria o agendamento sozinho ao ser aberto — só pré-preenche o formulário público, o cliente sempre confirma manualmente (decisão de segurança: evita que um link pré-carregado por scanner de e-mail reserve um horário sem ninguém ter pedido)
+- Limiar de "cliente sumido" (60 dias, badge passivo) e `dias_reagendamento` (envio ativo de e-mail, configurável) são decisões independentes — mudar um não muda o outro
+- "Acesso total" pra um auxiliar é literalmente promover `Usuario.Papel` pra `dono` (reversível) — não criar um sistema de permissões granulares separado enquanto não houver um caso de uso real que precise de nuance
+- Serviço individual (`Servico.ProfissionalID`) é aditivo — nunca restringe o que já funcionava (qualquer auxiliar continua editando o catálogo geral livremente); só adiciona a opção de um serviço ficar exclusivo de quem tem a permissão `PodeCadastrarServicoIndividual`
+- Histórico de atividades é só as 4 ações pedidas (serviço criado, agendamento criado pelo painel, cancelado, marcado como pago) — não é log genérico de auditoria de todo o sistema, e nunca inclui ações do próprio cliente na página pública (self-service não é "ação de profissional")

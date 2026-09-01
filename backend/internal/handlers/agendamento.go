@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -214,7 +215,7 @@ func intervalosOcupados(db *gorm.DB, estabelecimentoID, profissionalID uint, dat
 		if err != nil {
 			continue
 		}
-		fim := inicio + ag.Servico.DuracaoMin
+		fim := inicio + ag.Servico.DuracaoEfetivaMin()
 		if considerarConcluido && ag.ConcluidoEm != nil {
 			concluidoMin := ag.ConcluidoEm.Hour()*60 + ag.ConcluidoEm.Minute()
 			if concluidoMin < fim {
@@ -399,7 +400,7 @@ func (h *AgendamentoHandler) criar(c *gin.Context, permitirAdmin bool) {
 	// atendimento concluído antes do fim oficial liberar o horário — a rota
 	// pública continua sempre conservadora (ver CLAUDE.md "Encaixe de
 	// horários").
-	conflito, err := h.haConflito(estabelecimentoID, profissionalID, data, input.Hora, servico.DuracaoMin, 0, permitirAdmin)
+	conflito, err := h.haConflito(estabelecimentoID, profissionalID, data, input.Hora, servico.DuracaoEfetivaMin(), 0, permitirAdmin)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao verificar disponibilidade"})
 		return
@@ -455,6 +456,17 @@ func (h *AgendamentoHandler) criar(c *gin.Context, permitirAdmin bool) {
 		}
 	}
 
+	// só registra no histórico quando o agendamento nasce pelo painel — a
+	// rota pública (self-service do próprio cliente) não é uma "ação de
+	// profissional" (ver CLAUDE.md "Histórico de atividades").
+	if permitirAdmin {
+		registrarAtividade(
+			h.DB, estabelecimentoID, auth.UsuarioID(c), models.AcaoAgendamentoCriado,
+			fmt.Sprintf("Criou um agendamento de %s (%s) para %s às %s",
+				cliente.Nome, servico.Nome, data.Format("02/01/2006"), input.Hora),
+		)
+	}
+
 	c.JSON(http.StatusCreated, toAgendamentoResponse(agendamento))
 }
 
@@ -505,8 +517,11 @@ func (h *AgendamentoHandler) Get(c *gin.Context) {
 }
 
 // cancelar transiciona o agendamento para "cancelado". Não existe exclusão
-// definitiva: cancelar preserva o histórico.
-func (h *AgendamentoHandler) cancelar(c *gin.Context, agendamento *models.Agendamento) {
+// definitiva: cancelar preserva o histórico. logarComoUsuarioID identifica
+// quem cancelou pelo painel pro histórico de atividades (ver CLAUDE.md) —
+// nil quando é o próprio cliente cancelando pela página pública, que não é
+// uma "ação de profissional".
+func (h *AgendamentoHandler) cancelar(c *gin.Context, agendamento *models.Agendamento, logarComoUsuarioID *uint) {
 	if agendamento.Status != models.StatusCancelado {
 		if err := h.DB.Model(agendamento).Update("status", models.StatusCancelado).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao cancelar agendamento"})
@@ -519,6 +534,15 @@ func (h *AgendamentoHandler) cancelar(c *gin.Context, agendamento *models.Agenda
 			if err := h.DB.First(&estabelecimento, agendamento.EstabelecimentoID).Error; err == nil {
 				go h.Notificador.NotificarCancelamento(estabelecimento, *agendamento)
 			}
+		}
+
+		if logarComoUsuarioID != nil {
+			registrarAtividade(
+				h.DB, agendamento.EstabelecimentoID, *logarComoUsuarioID, models.AcaoAgendamentoCancelado,
+				fmt.Sprintf("Cancelou o agendamento de %s (%s) em %s às %s",
+					agendamento.Cliente.Nome, agendamento.Servico.Nome,
+					agendamento.Data.Format("02/01/2006"), agendamento.Hora),
+			)
 		}
 	}
 
@@ -537,7 +561,8 @@ func (h *AgendamentoHandler) Cancelar(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "você só pode cancelar agendamentos da sua própria agenda"})
 		return
 	}
-	h.cancelar(c, agendamento)
+	usuarioID := auth.UsuarioID(c)
+	h.cancelar(c, agendamento, &usuarioID)
 }
 
 type atualizarPagoInput struct {
@@ -563,11 +588,22 @@ func (h *AgendamentoHandler) AtualizarPago(c *gin.Context) {
 		return
 	}
 
+	marcandoComoPago := input.Pago && !agendamento.Pago
+
 	if err := h.DB.Model(agendamento).Update("pago", input.Pago).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao atualizar pagamento"})
 		return
 	}
 	agendamento.Pago = input.Pago
+
+	// só registra a transição pra "pago" — desmarcar não é a ação que o
+	// histórico precisa mostrar (ver CLAUDE.md "Histórico de atividades").
+	if marcandoComoPago {
+		registrarAtividade(
+			h.DB, agendamento.EstabelecimentoID, auth.UsuarioID(c), models.AcaoAgendamentoPago,
+			fmt.Sprintf("Marcou como pago: %s (%s)", agendamento.Cliente.Nome, agendamento.Servico.Nome),
+		)
+	}
 
 	c.JSON(http.StatusOK, toAgendamentoResponse(*agendamento))
 }
@@ -700,7 +736,7 @@ func (h *AgendamentoHandler) Reagendar(c *gin.Context) {
 	// considerarConcluido é sempre true — ver CLAUDE.md "Encaixe de horários".
 	conflito, err := h.haConflito(
 		agendamento.EstabelecimentoID, agendamento.ProfissionalID,
-		data, input.Hora, agendamento.Servico.DuracaoMin, agendamento.ID, true,
+		data, input.Hora, agendamento.Servico.DuracaoEfetivaMin(), agendamento.ID, true,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao verificar disponibilidade"})
@@ -750,5 +786,5 @@ func (h *AgendamentoHandler) CancelarPublico(c *gin.Context) {
 		return
 	}
 
-	h.cancelar(c, agendamento)
+	h.cancelar(c, agendamento, nil)
 }

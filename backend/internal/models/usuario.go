@@ -38,6 +38,15 @@ type Usuario struct {
 	// pela primeira vez (ver handlers.UsuarioHandler.AtualizarHorario).
 	HorarioTrabalho datatypes.JSON `json:"horario_trabalho"`
 
+	// PodeCadastrarServicoIndividual libera, pra um profissional auxiliar,
+	// a opção de criar um Servico vinculado só a ele mesmo (ver
+	// models.Servico.ProfissionalID e CLAUDE.md "Serviços individuais") —
+	// concedida pelo dono na tela Equipe. Não tem efeito nenhum pro dono
+	// (que já pode tudo) nem restringe o que já existia: qualquer auxiliar
+	// continua podendo editar o catálogo geral normalmente, essa permissão
+	// só adiciona a possibilidade de um serviço "só dele".
+	PodeCadastrarServicoIndividual bool `gorm:"not null;default:false" json:"pode_cadastrar_servico_individual"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

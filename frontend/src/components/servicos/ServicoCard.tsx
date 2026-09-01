@@ -1,8 +1,8 @@
-import { MoreVertical, Pencil, Trash2 } from "lucide-react"
+import { MoreVertical, Pencil, Trash2, User } from "lucide-react"
 import { DynamicIcon } from "@/lib/icons"
 import { CORES_SERVICO_CLASSES } from "@/lib/cores"
 import { cn } from "@/lib/utils"
-import { formatarDuracao, formatarPrecoServico } from "@/lib/formatacao"
+import { formatarDuracaoServico, formatarPrecoServico } from "@/lib/formatacao"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -43,7 +43,15 @@ export function ServicoCard({ servico, onEdit, onDelete }: ServicoCardProps) {
             </div>
           )}
           <div>
-            <h3 className="font-heading font-semibold">{servico.nome}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-heading font-semibold">{servico.nome}</h3>
+              {servico.profissional_id !== null && (
+                <span className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                  <User className="size-3" />
+                  {servico.profissional?.nome ?? "Individual"}
+                </span>
+              )}
+            </div>
             {servico.descricao && (
               <p className="mt-0.5 text-sm text-muted-foreground">{servico.descricao}</p>
             )}
@@ -52,7 +60,7 @@ export function ServicoCard({ servico, onEdit, onDelete }: ServicoCardProps) {
                 {formatarPrecoServico(servico.preco, servico.preco_a_partir)}
               </span>
               <span>·</span>
-              <span>{formatarDuracao(servico.duracao_min)}</span>
+              <span>{formatarDuracaoServico(servico.duracao_min, servico.duracao_max_min)}</span>
             </div>
           </div>
         </div>

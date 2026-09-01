@@ -334,3 +334,33 @@ func (h *EstabelecimentoHandler) AtualizarDescontoProfissional(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"desconto_profissional_percentual": input.Percentual})
 }
+
+type diasReagendamentoInput struct {
+	// Dias nil = desliga a feature (padrão) — nenhum e-mail automático de
+	// reagendamento é enviado.
+	Dias *int `json:"dias"`
+}
+
+// AtualizarDiasReagendamento define depois de quantos dias sem um novo
+// agendamento confirmado o cliente recebe o e-mail automático de
+// reagendamento (ver internal/reagendamento) — decisão do dono.
+func (h *EstabelecimentoHandler) AtualizarDiasReagendamento(c *gin.Context) {
+	var input diasReagendamentoInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if input.Dias != nil && *input.Dias <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "dias precisa ser maior que zero"})
+		return
+	}
+
+	err := h.DB.Model(&models.Estabelecimento{}).
+		Where("id = ?", auth.EstabelecimentoID(c)).
+		Update("dias_reagendamento", input.Dias).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao atualizar dias de reagendamento"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"dias_reagendamento": input.Dias})
+}

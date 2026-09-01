@@ -73,6 +73,7 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 	plataformaHandler := handlers.NewPlataformaHandler(db, gerenciador, plataformaSenha)
 	produtoHandler := handlers.NewProdutoHandler(db)
 	vendaProdutoHandler := handlers.NewVendaProdutoHandler(db)
+	atividadeHandler := handlers.NewAtividadeHandler(db)
 
 	apiGroup := router.Group("/api")
 	{
@@ -116,6 +117,9 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 			// internamente (ver CLAUDE.md "Cadastro de produtos") — decisão
 			// financeira, só o dono mexe.
 			admin.PUT("/estabelecimento/desconto-profissional", authpkg.ExigirDono(), estabelecimentoHandler.AtualizarDescontoProfissional)
+			// depois de quantos dias sem novo agendamento o cliente recebe o
+			// e-mail automático de reagendamento (ver internal/reagendamento).
+			admin.PUT("/estabelecimento/dias-reagendamento", authpkg.ExigirDono(), estabelecimentoHandler.AtualizarDiasReagendamento)
 
 			// "Meu Plano" (Configurações) e o banner de vencimento — gerar/
 			// reaproveitar o link de renovação e confirmar sem esperar o
@@ -127,6 +131,10 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 			// outro profissional.
 			admin.GET("/profissionais", authpkg.ExigirDono(), profissionalHandler.Listar)
 			admin.POST("/profissionais/convidar", authpkg.ExigirDono(), profissionalHandler.Convidar)
+			// promover/rebaixar (papel) e conceder permissões pontuais — só o
+			// dono mexe, e nunca no próprio papel (ver comentário no handler).
+			admin.PATCH("/profissionais/:id/papel", authpkg.ExigirDono(), profissionalHandler.AtualizarPapel)
+			admin.PATCH("/profissionais/:id/permissoes", authpkg.ExigirDono(), profissionalHandler.AtualizarPermissoes)
 
 			// cada profissional (dono ou auxiliar) edita só o próprio horário
 			// de trabalho + intervalo de descanso.
@@ -171,6 +179,11 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 			admin.GET("/produtos/:id", produtoHandler.Get)
 			admin.PUT("/produtos/:id", produtoHandler.Update)
 			admin.DELETE("/produtos/:id", produtoHandler.Delete)
+			// importação em lote a partir de PDF/XLSX — sempre passa por uma
+			// prévia editável antes de criar qualquer produto de verdade (ver
+			// CLAUDE.md "Importação de produtos").
+			admin.POST("/produtos/importar/preview", produtoHandler.ImportarPreview)
+			admin.POST("/produtos/importar/confirmar", produtoHandler.ImportarConfirmar)
 
 			// vendas de produto — pro cliente final (avulsa ou junto de um
 			// agendamento) ou compra interna de um profissional, com desconto
@@ -181,6 +194,10 @@ func NewRouter(db *gorm.DB, jwtSecret string, notificador *notifications.Notific
 			admin.POST("/vendas-produtos", vendaProdutoHandler.Create)
 			admin.PATCH("/vendas-produtos/:id/pago", vendaProdutoHandler.AtualizarPago)
 			admin.PATCH("/vendas-produtos/:id/cancelar", vendaProdutoHandler.Cancelar)
+
+			// histórico de ações da equipe (ver CLAUDE.md "Histórico de
+			// atividades") — extensão da tela Equipe, mesma regra de acesso.
+			admin.GET("/atividades", authpkg.ExigirDono(), atividadeHandler.List)
 		}
 
 		publico := apiGroup.Group("/publico/:slug")

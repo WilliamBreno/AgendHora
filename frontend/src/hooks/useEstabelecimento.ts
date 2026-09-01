@@ -124,6 +124,20 @@ export function useEstabelecimento() {
     return resposta.desconto_profissional_percentual
   }
 
+  // atualizarDiasReagendamento define depois de quantos dias sem novo
+  // agendamento o cliente recebe o e-mail automático de reagendamento —
+  // null desliga a feature.
+  async function atualizarDiasReagendamento(dias: number | null) {
+    const resposta = await apiAdmin.put<{ dias_reagendamento: number | null }>(
+      "/estabelecimento/dias-reagendamento",
+      { dias }
+    )
+    setEstabelecimento((atual) =>
+      atual ? { ...atual, dias_reagendamento: resposta.dias_reagendamento } : atual
+    )
+    return resposta.dias_reagendamento
+  }
+
   return {
     estabelecimento,
     loading,
@@ -135,6 +149,7 @@ export function useEstabelecimento() {
     renovar,
     verificarRenovacao,
     atualizarDescontoProfissional,
+    atualizarDiasReagendamento,
     recarregar: carregar,
   }
 }

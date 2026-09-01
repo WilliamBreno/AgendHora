@@ -18,11 +18,22 @@ export interface Servico {
   preco: number | null
   preco_a_partir: boolean
   duracao_min: number
+  // duracao_max_min: null = duração fixa (comportamento de sempre). Quando
+  // preenchido, o serviço tem duração variável ("de X a Y min") — a agenda
+  // sempre bloqueia usando o teto da faixa, nunca o mínimo, pra nunca dar
+  // conflito de horário (ver CLAUDE.md "Duração variável de serviço").
+  duracao_max_min: number | null
   descricao: string
   cor: CorServico
   icone: string
   foto: string
   estabelecimento_id: number
+  // profissional_id: null = catálogo geral (comportamento de sempre),
+  // oferecido por qualquer profissional. Preenchido = serviço individual —
+  // só existe pra esse profissional, a página pública não pergunta com quem
+  // (ver CLAUDE.md "Serviços individuais").
+  profissional_id: number | null
+  profissional?: Pick<Usuario, "id" | "nome">
   created_at: string
   updated_at: string
 }
@@ -32,10 +43,12 @@ export interface ServicoInput {
   preco: number | null
   preco_a_partir: boolean
   duracao_min: number
+  duracao_max_min: number | null
   descricao: string
   cor: CorServico
   icone: string
   foto: string
+  profissional_id: number | null
 }
 
 export type StatusAgendamento = "pendente" | "confirmado" | "cancelado"
@@ -114,6 +127,10 @@ export interface Usuario {
   papel: PapelUsuario
   estabelecimento_id: number
   horario_trabalho: HorarioFuncionamento
+  // libera, pra um auxiliar, a opção de criar um serviço vinculado só a ele
+  // mesmo — concedida pelo dono na tela Equipe (ver CLAUDE.md "Serviços
+  // individuais"). Sem efeito nenhum pro dono, que já pode tudo.
+  pode_cadastrar_servico_individual: boolean
   created_at: string
   updated_at: string
 }
@@ -136,6 +153,24 @@ export interface ConvitePendente {
 export interface Equipe {
   profissionais: Usuario[]
   convites_pendentes: ConvitePendente[]
+}
+
+export type AcaoAtividade =
+  | "servico_criado"
+  | "agendamento_criado"
+  | "agendamento_cancelado"
+  | "agendamento_pago"
+
+// Histórico de ações da equipe, visível só pro dono na tela Equipe (ver
+// CLAUDE.md "Histórico de atividades") — quem cadastrou serviço, quem criou
+// agendamento pelo painel, quem cancelou, quem marcou como pago.
+export interface RegistroAtividade {
+  id: number
+  usuario_id: number
+  usuario?: Pick<Usuario, "id" | "nome" | "papel">
+  acao: AcaoAtividade
+  descricao: string
+  created_at: string
 }
 
 // Bloqueio marca um período indisponível pra agendar (folga, almoço,
@@ -229,6 +264,9 @@ export interface Estabelecimento {
   // compra um produto internamente — null = nenhum desconto configurado,
   // continua editável por venda (ver CLAUDE.md "Cadastro de produtos").
   desconto_profissional_percentual: number | null
+  // dias sem um novo agendamento confirmado até o cliente receber o e-mail
+  // automático de reagendamento — null desliga a feature (padrão).
+  dias_reagendamento: number | null
   created_at: string
   updated_at: string
 }
@@ -435,6 +473,20 @@ export interface VendaProduto {
   estabelecimento_id: number
   created_at: string
   updated_at: string
+}
+
+// Item lido de um arquivo PDF/XLSX de lista de produtos, ainda não salvo —
+// aparece numa prévia editável antes de confirmar a importação (ver
+// CLAUDE.md "Importação de produtos").
+export interface ItemImportadoProduto {
+  nome: string
+  preco: number
+}
+
+export interface ImportacaoProdutosResultado {
+  criados: number
+  atualizados: number
+  total: number
 }
 
 export interface VendaProdutoInput {

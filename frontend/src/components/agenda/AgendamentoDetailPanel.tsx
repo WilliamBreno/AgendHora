@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { DynamicIcon } from "@/lib/icons"
 import { CORES_SERVICO_CLASSES } from "@/lib/cores"
 import { cn } from "@/lib/utils"
-import { formatarDataExibicao, formatarPrecoServico } from "@/lib/formatacao"
+import { formatarDataExibicao, formatarDuracaoServico, formatarPrecoServico } from "@/lib/formatacao"
 import {
   AgendamentoFinanceiroSection,
   type FinanceiroInput,
@@ -133,8 +133,8 @@ export function AgendamentoDetailPanel({
                 <div>
                   <p className="font-medium">{agendamento.servico.nome}</p>
                   <p className="text-sm text-muted-foreground">
-                    {agendamento.servico.duracao_min} min ·{" "}
-                    {formatarPrecoServico(agendamento.servico.preco, agendamento.servico.preco_a_partir)}
+                    {formatarDuracaoServico(agendamento.servico.duracao_min, agendamento.servico.duracao_max_min)}{" "}
+                    · {formatarPrecoServico(agendamento.servico.preco, agendamento.servico.preco_a_partir)}
                   </p>
                 </div>
               </div>

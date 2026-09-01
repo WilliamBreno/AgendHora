@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { apiAdmin, ApiError } from "@/lib/api"
-import type { Produto, ProdutoInput } from "@/types"
+import { apiAdmin, enviarArquivoAdmin, ApiError } from "@/lib/api"
+import type {
+  ImportacaoProdutosResultado,
+  ItemImportadoProduto,
+  Produto,
+  ProdutoInput,
+} from "@/types"
 
 function ordenarPorNome(produtos: Produto[]) {
   return [...produtos].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
@@ -44,5 +49,36 @@ export function useProdutos() {
     setProdutos((atual) => atual.filter((p) => p.id !== id))
   }
 
-  return { produtos, loading, criar, atualizar, excluir, recarregar: carregar }
+  // importarPreview só lê o arquivo (PDF ou XLSX) e devolve os itens
+  // encontrados — nada é salvo ainda (ver CLAUDE.md "Importação de
+  // produtos"). PDF é leitura heurística e pode errar, por isso sempre
+  // passa por essa prévia editável antes de confirmar.
+  async function importarPreview(arquivo: File) {
+    const resposta = await enviarArquivoAdmin<{ itens: ItemImportadoProduto[] }>(
+      "/produtos/importar/preview",
+      "arquivo",
+      arquivo
+    )
+    return resposta.itens
+  }
+
+  async function importarConfirmar(itens: ItemImportadoProduto[]) {
+    const resultado = await apiAdmin.post<ImportacaoProdutosResultado>(
+      "/produtos/importar/confirmar",
+      { itens }
+    )
+    await carregar()
+    return resultado
+  }
+
+  return {
+    produtos,
+    loading,
+    criar,
+    atualizar,
+    excluir,
+    importarPreview,
+    importarConfirmar,
+    recarregar: carregar,
+  }
 }

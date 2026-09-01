@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Package, Plus, ShoppingCart } from "lucide-react"
+import { FileUp, Package, Plus, ShoppingCart } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
@@ -15,6 +15,7 @@ import {
 import { ProdutoCard } from "@/components/produtos/ProdutoCard"
 import { ProdutoFormDialog } from "@/components/produtos/ProdutoFormDialog"
 import { VendaProdutoDialog } from "@/components/produtos/VendaProdutoDialog"
+import { ImportarProdutosDialog } from "@/components/produtos/ImportarProdutosDialog"
 import { useProdutos } from "@/hooks/useProdutos"
 import { useVendasProdutos } from "@/hooks/useVendasProdutos"
 import { useEquipe } from "@/hooks/useEquipe"
@@ -25,7 +26,8 @@ import type { Produto, ProdutoInput, VendaProdutoInput } from "@/types"
 
 export function ProdutosPage() {
   const { ehDono, usuario } = useAuth()
-  const { produtos, loading, criar, atualizar, excluir } = useProdutos()
+  const { produtos, loading, criar, atualizar, excluir, importarPreview, importarConfirmar } =
+    useProdutos()
   const { registrar } = useVendasProdutos()
   const { equipe } = useEquipe(ehDono)
   const { estabelecimento } = useEstabelecimento()
@@ -37,6 +39,7 @@ export function ProdutosPage() {
   const [excluindo, setExcluindo] = useState(false)
   const [vendaAberta, setVendaAberta] = useState(false)
   const [produtoParaVender, setProdutoParaVender] = useState<Produto | null>(null)
+  const [importarAberto, setImportarAberto] = useState(false)
 
   const produtosComEstoqueBaixo = produtos.filter(
     (p) => p.ativo && p.estoque_minimo > 0 && p.quantidade_estoque <= p.estoque_minimo
@@ -117,7 +120,11 @@ export function ProdutosPage() {
             Catálogo, estoque e vendas pra clientes e para a equipe.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setImportarAberto(true)}>
+            <FileUp className="size-4" />
+            Importar
+          </Button>
           <Button variant="outline" onClick={() => abrirVenda()} disabled={produtos.length === 0}>
             <ShoppingCart className="size-4" />
             Registrar venda
@@ -182,6 +189,13 @@ export function ProdutosPage() {
         descontoPadrao={estabelecimento?.desconto_profissional_percentual ?? null}
         produtoInicialId={produtoParaVender?.id}
         onSubmit={registrarVenda}
+      />
+
+      <ImportarProdutosDialog
+        open={importarAberto}
+        onOpenChange={setImportarAberto}
+        onLerArquivo={importarPreview}
+        onConfirmar={importarConfirmar}
       />
 
       <AlertDialog

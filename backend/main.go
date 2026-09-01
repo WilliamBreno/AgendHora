@@ -10,6 +10,7 @@ import (
 	"agendamento/backend/internal/infinitepay"
 	"agendamento/backend/internal/lembretes"
 	"agendamento/backend/internal/notifications"
+	"agendamento/backend/internal/reagendamento"
 	"agendamento/backend/internal/renovacao"
 	"agendamento/backend/internal/resumosemanal"
 )
@@ -30,6 +31,7 @@ func main() {
 	pagamentoHandler := handlers.NewPagamentoHandler(db, infinitePayCliente, cfg.FrontendURL, cfg.BackendURL)
 	renovacao.Iniciar(db, notificador, pagamentoHandler)
 	resumosemanal.Iniciar(db, notificador)
+	reagendamento.Iniciar(db, notificador, cfg.FrontendURL)
 
 	router := api.NewRouter(db, cfg.JWTSecret, notificador, cfg.AllowedOrigins, cfg.FrontendURL, cfg.PlataformaSenha, pagamentoHandler)
 

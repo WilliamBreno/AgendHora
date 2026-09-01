@@ -14,14 +14,27 @@ import { Textarea } from "@/components/ui/textarea"
 import { ColorPicker } from "@/components/servicos/ColorPicker"
 import { IconPickerField } from "@/components/servicos/IconPickerField"
 import { ImageUploadField } from "@/components/common/ImageUploadField"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { CORES_SERVICO, type CorServico, type Servico, type ServicoInput } from "@/types"
+import { CORES_SERVICO, type CorServico, type Servico, type ServicoInput, type Usuario } from "@/types"
 
 interface ServicoFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   servico?: Servico | null
   iconesDisponiveis: string[]
+  // Serviços individuais (ver CLAUDE.md) — o dono pode atribuir a qualquer
+  // profissional, sem precisar de permissão; um auxiliar só pode marcar o
+  // próprio serviço como individual, e só com a permissão concedida.
+  ehDono: boolean
+  usuarioAtual: Usuario | null
+  profissionais: Usuario[]
   onSubmit: (input: ServicoInput) => Promise<void>
 }
 
@@ -30,10 +43,12 @@ const FORM_VAZIO: ServicoInput = {
   preco: null,
   preco_a_partir: false,
   duracao_min: 30,
+  duracao_max_min: null,
   descricao: "",
   cor: CORES_SERVICO[0],
   icone: "",
   foto: "",
+  profissional_id: null,
 }
 
 export function ServicoFormDialog({
@@ -41,6 +56,9 @@ export function ServicoFormDialog({
   onOpenChange,
   servico,
   iconesDisponiveis,
+  ehDono,
+  usuarioAtual,
+  profissionais,
   onSubmit,
 }: ServicoFormDialogProps) {
   const [form, setForm] = useState<ServicoInput>(FORM_VAZIO)
@@ -57,10 +75,12 @@ export function ServicoFormDialog({
             preco: servico.preco,
             preco_a_partir: servico.preco_a_partir,
             duracao_min: servico.duracao_min,
+            duracao_max_min: servico.duracao_max_min,
             descricao: servico.descricao,
             cor: servico.cor,
             icone: servico.icone,
             foto: servico.foto,
+            profissional_id: servico.profissional_id,
           }
         : FORM_VAZIO
     )
@@ -80,6 +100,10 @@ export function ServicoFormDialog({
     }
     if (form.duracao_min <= 0) {
       setErro("A duração precisa ser maior que zero.")
+      return
+    }
+    if (form.duracao_max_min !== null && form.duracao_max_min <= form.duracao_min) {
+      setErro("A duração máxima precisa ser maior que a duração mínima.")
       return
     }
 
@@ -116,6 +140,59 @@ export function ServicoFormDialog({
               />
             </div>
 
+            {ehDono && profissionais.length > 0 && (
+              <div className="grid gap-1.5">
+                <Label>Profissional</Label>
+                <Select
+                  value={form.profissional_id === null ? "todos" : String(form.profissional_id)}
+                  onValueChange={(value) =>
+                    setForm((f) => ({
+                      ...f,
+                      profissional_id: value === "todos" ? null : Number(value),
+                    }))
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Todos (catálogo geral)">
+                      {(value: string | null) => {
+                        if (!value || value === "todos") return "Todos (catálogo geral)"
+                        return profissionais.find((p) => String(p.id) === value)?.nome ?? null
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos (catálogo geral)</SelectItem>
+                    {profissionais.map((p) => (
+                      <SelectItem key={p.id} value={String(p.id)}>
+                        {p.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Serviço individual: só aparece na página pública quando esse profissional é o
+                  escolhido — o cliente nem precisa selecionar com quem.
+                </p>
+              </div>
+            )}
+
+            {!ehDono && usuarioAtual?.pode_cadastrar_servico_individual && (
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={form.profissional_id !== null}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      profissional_id: e.target.checked ? (usuarioAtual?.id ?? null) : null,
+                    }))
+                  }
+                  className="size-4 rounded border-input accent-primary"
+                />
+                Serviço individual (só seu — não aparece pros outros profissionais)
+              </label>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-1.5">
                 <Label htmlFor="preco">Preço (R$)</Label>
@@ -135,7 +212,9 @@ export function ServicoFormDialog({
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="duracao">Duração (min)</Label>
+                <Label htmlFor="duracao">
+                  {form.duracao_max_min !== null ? "Duração mínima (min)" : "Duração (min)"}
+                </Label>
                 <Input
                   id="duracao"
                   type="number"
@@ -148,6 +227,41 @@ export function ServicoFormDialog({
                 />
               </div>
             </div>
+
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={form.duracao_max_min !== null}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    duracao_max_min: e.target.checked ? f.duracao_min + 15 : null,
+                  }))
+                }
+                className="size-4 rounded border-input accent-primary"
+              />
+              Duração variável (de X a Y min)
+            </label>
+            {form.duracao_max_min !== null && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="duracao_max">Duração máxima (min)</Label>
+                <Input
+                  id="duracao_max"
+                  type="number"
+                  min={0}
+                  step="5"
+                  value={form.duracao_max_min}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, duracao_max_min: Number(e.target.value) }))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  O cliente vê "de {form.duracao_min} a {form.duracao_max_min} min". A agenda
+                  sempre reserva o tempo máximo, pra nunca dar conflito — quem atende marca
+                  "Concluir agora" se terminar antes, e o resto do horário libera na hora.
+                </p>
+              </div>
+            )}
 
             <label
               className={cn(

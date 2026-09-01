@@ -100,6 +100,48 @@ func emailLembreteHTML(estabelecimento models.Estabelecimento, agendamento model
 	return envelope("Lembrete de agendamento", corpo)
 }
 
+func emailLembreteFinalHTML(estabelecimento models.Estabelecimento, agendamento models.Agendamento, dataFormatada string) string {
+	corpo := fmt.Sprintf(
+		`<p style="font-size:15px;margin:0 0 4px;">Olá, %s!</p>
+		<p style="font-size:15px;margin:0 0 4px;color:#44403c;">Seu horário em <strong>%s</strong> é daqui a 30 minutos!</p>`,
+		agendamento.Cliente.Nome, estabelecimento.Nome,
+	)
+	corpo += tabelaDetalhes(
+		linhaDetalhe("Serviço", agendamento.Servico.Nome),
+		linhaDetalhe("Data", dataFormatada),
+		linhaDetalhe("Horário", agendamento.Hora),
+	)
+	return envelope("Seu horário é daqui a pouco", corpo)
+}
+
+// emailReagendamentoHTML avisa um cliente inativo há diasSemAgendar dias
+// (ver internal/reagendamento). Quando sugestaoTexto vem preenchido, o
+// horário do último agendamento continua livre — o botão principal já leva
+// pro formulário público com serviço/profissional/data/hora pré-selecionados
+// (o cliente só confirma); sem sugestão, o botão é só o link normal de
+// agendar, sem nada pré-selecionado.
+func emailReagendamentoHTML(estabelecimento models.Estabelecimento, cliente models.Cliente, diasSemAgendar int, link, sugestaoTexto string) string {
+	corpo := fmt.Sprintf(
+		`<p style="font-size:15px;margin:0 0 4px;">Olá, %s!</p>
+		<p style="font-size:15px;margin:12px 0;color:#44403c;">Faz %d dias que você não agenda em <strong>%s</strong> — que tal marcar um novo horário?</p>`,
+		cliente.Nome, diasSemAgendar, estabelecimento.Nome,
+	)
+	if sugestaoTexto != "" {
+		corpo += fmt.Sprintf(
+			`<p style="font-size:14px;margin:12px 0;color:#44403c;">Deixamos pré-selecionado o mesmo horário de sempre: <strong>%s</strong>. É só confirmar.</p>
+			<p style="margin:20px 0;"><a href="%s" style="display:inline-block;background:%s;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;">Agendar %s</a></p>`,
+			sugestaoTexto, link, corPrimaria, sugestaoTexto,
+		)
+	} else {
+		corpo += fmt.Sprintf(
+			`<p style="margin:20px 0;"><a href="%s" style="display:inline-block;background:%s;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;">Agendar novo horário</a></p>`,
+			link, corPrimaria,
+		)
+	}
+	corpo += `<p style="font-size:12px;color:#a8a29e;margin-top:16px;">Se você não quiser mais receber esse aviso, é só ignorar este e-mail.</p>`
+	return envelope("Que tal agendar de novo?", corpo)
+}
+
 func emailRenovacaoPendenteHTML(estabelecimento models.Estabelecimento, diasRestantes int, link string) string {
 	var mensagemPrazo string
 	switch {

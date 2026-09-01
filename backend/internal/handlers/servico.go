@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"slices"
 	"strconv"
@@ -27,18 +28,60 @@ type servicoInput struct {
 	Preco *float64 `json:"preco"` // nil = sem preço cadastrado ("a combinar" na página pública)
 	// PrecoAPartir só faz sentido com Preco preenchido — ignorado pelo
 	// handler quando Preco é nil.
-	PrecoAPartir bool   `json:"preco_a_partir"`
-	DuracaoMin   int    `json:"duracao_min" binding:"required,gt=0"`
-	Descricao    string `json:"descricao"`
-	Cor          string `json:"cor" binding:"required"`
-	Icone        string `json:"icone"`
-	Foto         string `json:"foto"`
+	PrecoAPartir  bool   `json:"preco_a_partir"`
+	DuracaoMin    int    `json:"duracao_min" binding:"required,gt=0"`
+	DuracaoMaxMin *int   `json:"duracao_max_min"`
+	Descricao     string `json:"descricao"`
+	Cor           string `json:"cor" binding:"required"`
+	Icone         string `json:"icone"`
+	Foto          string `json:"foto"`
+	// ProfissionalID nil = catálogo geral (comportamento de sempre).
+	// Preenchido = serviço individual — ver validarProfissionalServico pra
+	// quem pode de fato usar isso.
+	ProfissionalID *uint `json:"profissional_id"`
 }
 
 // validarPreco só existe pra rejeitar um preço explicitamente inválido
 // (negativo ou zero) quando informado — nil (sem preço) é sempre válido.
 func validarPreco(preco *float64) bool {
 	return preco == nil || *preco > 0
+}
+
+// validarDuracaoMax só existe pra rejeitar uma faixa sem sentido — nil (sem
+// faixa, duração fixa) é sempre válido; quando preenchido, precisa ser
+// estritamente maior que a duração mínima, senão não é faixa nenhuma.
+func validarDuracaoMax(duracaoMin int, duracaoMax *int) bool {
+	return duracaoMax == nil || *duracaoMax > duracaoMin
+}
+
+// validarProfissionalServico decide se profissionalID pode ser aplicado,
+// dado quem está fazendo a chamada — ver CLAUDE.md "Serviços individuais":
+//   - dono: sempre pode — nil (catálogo geral) ou atribuir a qualquer
+//     profissional do próprio estabelecimento, sem precisar de permissão
+//     nenhuma (o dono já pode tudo).
+//   - auxiliar: só nil (catálogo geral, comportamento de sempre — essa
+//     permissão é aditiva, não tira o que já existia) ou o próprio ID, e só
+//     com PodeCadastrarServicoIndividual concedida pelo dono. Nunca pode
+//     atribuir um serviço a um colega.
+func (h *ServicoHandler) validarProfissionalServico(c *gin.Context, estabelecimentoID uint, profissionalID *uint) bool {
+	if profissionalID == nil {
+		return true
+	}
+	if auth.Papel(c) != models.PapelAuxiliar {
+		var total int64
+		h.DB.Model(&models.Usuario{}).
+			Where("id = ? AND estabelecimento_id = ?", *profissionalID, estabelecimentoID).
+			Count(&total)
+		return total > 0
+	}
+	if *profissionalID != auth.UsuarioID(c) {
+		return false
+	}
+	var usuario models.Usuario
+	if err := h.DB.First(&usuario, auth.UsuarioID(c)).Error; err != nil {
+		return false
+	}
+	return usuario.PodeCadastrarServicoIndividual
 }
 
 func validarCor(cor string) bool {
@@ -62,7 +105,8 @@ func (h *ServicoHandler) validarIcone(icone string, estabelecimentoID uint) bool
 
 func (h *ServicoHandler) List(c *gin.Context) {
 	var servicos []models.Servico
-	err := h.DB.Where("estabelecimento_id = ?", auth.EstabelecimentoID(c)).
+	err := h.DB.Preload("Profissional").
+		Where("estabelecimento_id = ?", auth.EstabelecimentoID(c)).
 		Order("nome asc").
 		Find(&servicos).Error
 	if err != nil {
@@ -95,22 +139,39 @@ func (h *ServicoHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "preço precisa ser maior que zero"})
 		return
 	}
+	if !validarDuracaoMax(input.DuracaoMin, input.DuracaoMaxMin) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "duração máxima precisa ser maior que a duração mínima"})
+		return
+	}
+	if !h.validarProfissionalServico(c, estabelecimentoID, input.ProfissionalID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "você não tem permissão pra criar um serviço individual"})
+		return
+	}
 
 	servico := models.Servico{
 		Nome:              strings.TrimSpace(input.Nome),
 		Preco:             input.Preco,
 		PrecoAPartir:      input.PrecoAPartir,
 		DuracaoMin:        input.DuracaoMin,
+		DuracaoMaxMin:     input.DuracaoMaxMin,
 		Descricao:         strings.TrimSpace(input.Descricao),
 		Cor:               input.Cor,
 		Icone:             input.Icone,
 		Foto:              input.Foto,
+		ProfissionalID:    input.ProfissionalID,
 		EstabelecimentoID: estabelecimentoID,
 	}
 	if err := h.DB.Create(&servico).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao criar serviço"})
 		return
 	}
+	if servico.ProfissionalID != nil {
+		h.DB.Preload("Profissional").First(&servico, servico.ID)
+	}
+	registrarAtividade(
+		h.DB, estabelecimentoID, auth.UsuarioID(c), models.AcaoServicoCriado,
+		fmt.Sprintf("Cadastrou o serviço \"%s\"", servico.Nome),
+	)
 	c.JSON(http.StatusCreated, servico)
 }
 
@@ -122,7 +183,8 @@ func (h *ServicoHandler) buscarServico(c *gin.Context) (*models.Servico, bool) {
 	}
 
 	var servico models.Servico
-	err = h.DB.Where("id = ? AND estabelecimento_id = ?", id, auth.EstabelecimentoID(c)).First(&servico).Error
+	err = h.DB.Preload("Profissional").
+		Where("id = ? AND estabelecimento_id = ?", id, auth.EstabelecimentoID(c)).First(&servico).Error
 	if err == gorm.ErrRecordNotFound {
 		c.JSON(http.StatusNotFound, gin.H{"error": "serviço não encontrado"})
 		return nil, false
@@ -168,19 +230,34 @@ func (h *ServicoHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "preço precisa ser maior que zero"})
 		return
 	}
+	if !validarDuracaoMax(input.DuracaoMin, input.DuracaoMaxMin) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "duração máxima precisa ser maior que a duração mínima"})
+		return
+	}
+	if !h.validarProfissionalServico(c, servico.EstabelecimentoID, input.ProfissionalID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "você não tem permissão pra tornar esse serviço individual"})
+		return
+	}
 
 	servico.Nome = strings.TrimSpace(input.Nome)
 	servico.Preco = input.Preco
 	servico.PrecoAPartir = input.PrecoAPartir
 	servico.DuracaoMin = input.DuracaoMin
+	servico.DuracaoMaxMin = input.DuracaoMaxMin
 	servico.Descricao = strings.TrimSpace(input.Descricao)
 	servico.Cor = input.Cor
 	servico.Icone = input.Icone
 	servico.Foto = input.Foto
+	servico.ProfissionalID = input.ProfissionalID
 
 	if err := h.DB.Save(servico).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao atualizar serviço"})
 		return
+	}
+	if servico.ProfissionalID != nil {
+		h.DB.Preload("Profissional").First(servico, servico.ID)
+	} else {
+		servico.Profissional = models.Usuario{}
 	}
 	c.JSON(http.StatusOK, servico)
 }

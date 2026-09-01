@@ -151,12 +151,14 @@ func (h *DisponibilidadeHandler) listar(c *gin.Context, considerarConcluido bool
 		limiteHoje = agora.Hour()*60 + agora.Minute()
 	}
 
+	duracaoEfetiva := servico.DuracaoEfetivaMin()
+
 	disponiveis := make([]string, 0)
-	for inicio := abre; inicio+servico.DuracaoMin <= fecha; inicio += passoMinutos {
+	for inicio := abre; inicio+duracaoEfetiva <= fecha; inicio += passoMinutos {
 		if limiteHoje >= 0 && inicio <= limiteHoje {
 			continue
 		}
-		fim := inicio + servico.DuracaoMin
+		fim := inicio + duracaoEfetiva
 		if sobrepoeIntervalo(inicio, fim, horarioDia) {
 			continue
 		}

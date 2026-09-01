@@ -45,8 +45,13 @@ type Agendamento struct {
 	// LembreteEnviado controla se o lembrete automático por e-mail (ver
 	// internal/lembretes) já foi disparado pra esse agendamento — evita
 	// reenviar a cada checagem do cron enquanto o horário ainda está dentro
-	// da janela de antecedência do lembrete.
+	// da janela de antecedência do lembrete (3h antes).
 	LembreteEnviado bool `gorm:"not null;default:false;index" json:"lembrete_enviado"`
+	// LembreteFinalEnviado é o segundo lembrete, mais próximo do horário (30
+	// min antes) — campo separado de LembreteEnviado porque os dois disparam
+	// em janelas diferentes e não podem compartilhar o mesmo controle de
+	// duplicidade.
+	LembreteFinalEnviado bool `gorm:"not null;default:false;index" json:"lembrete_final_enviado"`
 	// ProfissionalID identifica qual profissional (dono ou auxiliar) atende
 	// esse agendamento — cada um tem sua própria agenda/disponibilidade.
 	// default:0 só existe pra migration em cima de linhas existentes (ver

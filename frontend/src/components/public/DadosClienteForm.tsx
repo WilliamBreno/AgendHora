@@ -22,6 +22,11 @@ interface DadosClienteFormProps {
   // outro segmento, o campo de link de referência nem aparece (ver
   // CLAUDE.md "Segmentos de negócio").
   mostrarLinkReferencia: boolean
+  // pré-preenchidos quando o cliente chega pelo link do e-mail de
+  // reagendamento automático (ver CLAUDE.md "Reagendamento automático") —
+  // continuam editáveis, só poupam o cliente de digitar de novo.
+  nomeInicial?: string
+  telefoneInicial?: string
   onSubmit: (dados: DadosCliente) => void
 }
 
@@ -37,9 +42,15 @@ export function DadosClienteForm({
   enviando,
   erro,
   mostrarLinkReferencia,
+  nomeInicial,
+  telefoneInicial,
   onSubmit,
 }: DadosClienteFormProps) {
-  const [form, setForm] = useState<DadosCliente>(FORM_VAZIO)
+  const [form, setForm] = useState<DadosCliente>({
+    ...FORM_VAZIO,
+    cliente_nome: nomeInicial ?? "",
+    cliente_telefone: telefoneInicial ?? "",
+  })
   const [erroLocal, setErroLocal] = useState<string | null>(null)
 
   function handleSubmit(event: FormEvent) {

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,15 +47,19 @@ func (h *ProfissionalHandler) linkConvite(c *gin.Context, token string) string {
 }
 
 type profissionalResponse struct {
-	ID       uint                `json:"id"`
-	Nome     string              `json:"nome"`
-	Email    string              `json:"email"`
-	Telefone string              `json:"telefone"`
-	Papel    models.PapelUsuario `json:"papel"`
+	ID                             uint                `json:"id"`
+	Nome                           string              `json:"nome"`
+	Email                          string              `json:"email"`
+	Telefone                       string              `json:"telefone"`
+	Papel                          models.PapelUsuario `json:"papel"`
+	PodeCadastrarServicoIndividual bool                `json:"pode_cadastrar_servico_individual"`
 }
 
 func toProfissionalResponse(u models.Usuario) profissionalResponse {
-	return profissionalResponse{ID: u.ID, Nome: u.Nome, Email: u.Email, Telefone: u.Telefone, Papel: u.Papel}
+	return profissionalResponse{
+		ID: u.ID, Nome: u.Nome, Email: u.Email, Telefone: u.Telefone, Papel: u.Papel,
+		PodeCadastrarServicoIndividual: u.PodeCadastrarServicoIndividual,
+	}
 }
 
 type conviteResponse struct {
@@ -285,4 +290,93 @@ func (h *ProfissionalHandler) AceitarConvite(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, sessaoResponse{Token: token, Estabelecimento: estabelecimento, Usuario: usuario})
+}
+
+func (h *ProfissionalHandler) buscarMembroEquipe(c *gin.Context) (*models.Usuario, bool) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id inválido"})
+		return nil, false
+	}
+	var usuario models.Usuario
+	err = h.DB.Where("id = ? AND estabelecimento_id = ?", id, auth.EstabelecimentoID(c)).First(&usuario).Error
+	if err == gorm.ErrRecordNotFound {
+		c.JSON(http.StatusNotFound, gin.H{"error": "profissional não encontrado"})
+		return nil, false
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao buscar profissional"})
+		return nil, false
+	}
+	return &usuario, true
+}
+
+type atualizarPapelInput struct {
+	Papel models.PapelUsuario `json:"papel" binding:"required"`
+}
+
+// AtualizarPapel promove um auxiliar a dono (acesso completo, igual o dono
+// original) ou rebaixa um dono de volta a auxiliar — reversível a qualquer
+// momento, decisão exclusiva de quem já é dono. Nunca aceita mudar o
+// próprio papel por essa rota, pra nunca deixar o estabelecimento sem
+// nenhum dono por engano (auto-rebaixamento) nem um dono se auto-promover
+// (já é dono, não faz sentido).
+//
+// Importante: o token JWT já emitido carrega o papel no momento do login
+// (dura 30 dias) — quem for promovido/rebaixado só vê o efeito depois de
+// sair e entrar de novo.
+func (h *ProfissionalHandler) AtualizarPapel(c *gin.Context) {
+	usuario, ok := h.buscarMembroEquipe(c)
+	if !ok {
+		return
+	}
+	if usuario.ID == auth.UsuarioID(c) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "não é possível alterar o próprio papel"})
+		return
+	}
+
+	var input atualizarPapelInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if input.Papel != models.PapelDono && input.Papel != models.PapelAuxiliar {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "papel inválido"})
+		return
+	}
+
+	if err := h.DB.Model(usuario).Update("papel", input.Papel).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao atualizar papel"})
+		return
+	}
+	usuario.Papel = input.Papel
+	c.JSON(http.StatusOK, toProfissionalResponse(*usuario))
+}
+
+type atualizarPermissoesInput struct {
+	PodeCadastrarServicoIndividual bool `json:"pode_cadastrar_servico_individual"`
+}
+
+// AtualizarPermissoes liga/desliga permissões pontuais de um auxiliar — hoje
+// só a de cadastrar serviço individual (ver models.Servico.ProfissionalID).
+// Não tem efeito num dono (ele já pode tudo, independente dessas flags).
+func (h *ProfissionalHandler) AtualizarPermissoes(c *gin.Context) {
+	usuario, ok := h.buscarMembroEquipe(c)
+	if !ok {
+		return
+	}
+
+	var input atualizarPermissoesInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := h.DB.Model(usuario).Update("pode_cadastrar_servico_individual", input.PodeCadastrarServicoIndividual).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao atualizar permissões"})
+		return
+	}
+	usuario.PodeCadastrarServicoIndividual = input.PodeCadastrarServicoIndividual
+	c.JSON(http.StatusOK, toProfissionalResponse(*usuario))
 }

@@ -131,6 +131,14 @@ type Estabelecimento struct {
 	// um link já usado não deve mais bater com nenhum webhook novo.
 	LinkPagamentoOrderNsu string `gorm:"index" json:"-"`
 
+	// DiasReagendamento é quantos dias sem um novo agendamento confirmado
+	// disparam o e-mail automático de reagendamento pro cliente (ver
+	// internal/reagendamento) — nil desliga a feature (padrão). Separado do
+	// limiar fixo de "cliente sumido" (60 dias, ClienteHandler.DiasClienteSumido)
+	// de propósito: um é só um badge passivo na tela de Clientes, o outro é
+	// um envio ativo de e-mail que o dono pode querer disparar bem antes.
+	DiasReagendamento *int `json:"dias_reagendamento"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

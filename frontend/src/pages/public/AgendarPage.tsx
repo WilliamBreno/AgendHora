@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { Link, useParams } from "react-router-dom"
+import { Link, useParams, useSearchParams } from "react-router-dom"
 import { ChevronLeft } from "lucide-react"
 import gsap from "gsap"
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,7 @@ import { usePublicoEstabelecimento } from "@/hooks/usePublicoEstabelecimento"
 import { usePublicoProfissionais } from "@/hooks/usePublicoProfissionais"
 import { useDisponibilidade } from "@/hooks/useDisponibilidade"
 import { apiPublico, ApiError } from "@/lib/api"
+import { formatarDataExibicao } from "@/lib/formatacao"
 import type { Agendamento, ProfissionalPublico, Servico } from "@/types"
 
 type Etapa = "servico" | "profissional" | "horario" | "dados" | "confirmacao"
@@ -33,6 +34,7 @@ const TITULO_ETAPA: Partial<Record<Etapa, string>> = {
 
 export function AgendarPage() {
   const { slug = "" } = useParams()
+  const [searchParams] = useSearchParams()
   const { estabelecimento, loading: carregandoEstabelecimento, naoEncontrado, indisponivel } =
     usePublicoEstabelecimento(slug)
   const { servicos, loading: carregandoServicos } = usePublicoServicos(slug)
@@ -46,6 +48,51 @@ export function AgendarPage() {
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [agendamento, setAgendamento] = useState<Agendamento | null>(null)
+  // true quando chegou pelo link do e-mail automático de reagendamento com
+  // um horário sugerido (ver CLAUDE.md "Reagendamento automático") — só
+  // controla o aviso mostrado na etapa "dados", o agendamento em si sempre
+  // exige o clique em "Confirmar agendamento" normalmente.
+  const [viaSugestaoReagendamento, setViaSugestaoReagendamento] = useState(false)
+  const prefillAplicado = useRef(false)
+
+  // pré-seleciona serviço/profissional/data/horário quando o link vem com
+  // esses parâmetros (e-mail de reagendamento automático) — o cliente só
+  // confirma, sem precisar escolher tudo de novo. Roda uma única vez,
+  // assim que serviços e profissionais terminarem de carregar.
+  useEffect(() => {
+    if (prefillAplicado.current) return
+    if (carregandoServicos || carregandoProfissionais) return
+    if (servicos.length === 0) return
+    prefillAplicado.current = true
+
+    const servicoIdParam = searchParams.get("servico_id")
+    if (!servicoIdParam) return
+    const servicoEncontrado = servicos.find((s) => String(s.id) === servicoIdParam)
+    if (!servicoEncontrado) return
+
+    setServico(servicoEncontrado)
+
+    const profissionalIdParam = searchParams.get("profissional_id")
+    const dataParam = searchParams.get("data")
+    const horaParam = searchParams.get("hora")
+    const profissionalEncontrado = profissionalIdParam
+      ? (profissionais.find((p) => String(p.id) === profissionalIdParam) ?? null)
+      : null
+
+    if (profissionalEncontrado && dataParam && horaParam) {
+      setProfissional(profissionalEncontrado)
+      setData(dataParam)
+      setHora(horaParam)
+      setViaSugestaoReagendamento(true)
+      setEtapa("dados")
+    } else if (profissionais.length > 1) {
+      setEtapa("profissional")
+    } else {
+      setProfissional(profissionais[0] ?? null)
+      setEtapa("horario")
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carregandoServicos, carregandoProfissionais, servicos, profissionais])
 
   const { horarios, loading: carregandoHorarios } = useDisponibilidade(
     slug,
@@ -74,13 +121,20 @@ export function AgendarPage() {
     setHora("")
     setErro(null)
     setAgendamento(null)
+    setViaSugestaoReagendamento(false)
   }
 
   // com só um profissional (o caso comum), pula direto pro horário — o
   // passo de escolha só aparece quando existe de fato uma escolha a fazer.
+  // Serviço individual (ver CLAUDE.md "Serviços individuais") já tem o
+  // profissional implícito — pula o passo de escolha mesmo com mais de um
+  // profissional na equipe, o cliente nem precisa saber que existem outros.
   function selecionarServico(s: Servico) {
     setServico(s)
-    if (profissionais.length > 1) {
+    if (s.profissional_id !== null) {
+      setProfissional(profissionais.find((p) => p.id === s.profissional_id) ?? null)
+      setEtapa("horario")
+    } else if (profissionais.length > 1) {
       setEtapa("profissional")
     } else {
       setProfissional(profissionais[0] ?? null)
@@ -89,9 +143,13 @@ export function AgendarPage() {
   }
 
   function voltar() {
+    const exigiaEscolhaProfissional = servico?.profissional_id === null && profissionais.length > 1
     if (etapa === "profissional") setEtapa("servico")
-    else if (etapa === "horario") setEtapa(profissionais.length > 1 ? "profissional" : "servico")
-    else if (etapa === "dados") setEtapa("horario")
+    else if (etapa === "horario") setEtapa(exigiaEscolhaProfissional ? "profissional" : "servico")
+    else if (etapa === "dados") {
+      setViaSugestaoReagendamento(false)
+      setEtapa("horario")
+    }
   }
 
   async function handleConfirmar(dadosCliente: DadosCliente) {
@@ -230,12 +288,25 @@ export function AgendarPage() {
         )}
 
         {etapa === "dados" && (
-          <DadosClienteForm
-            enviando={enviando}
-            erro={erro}
-            mostrarLinkReferencia={estabelecimento?.segmento === "tatuagem"}
-            onSubmit={handleConfirmar}
-          />
+          <div className="flex flex-col gap-4">
+            {viaSugestaoReagendamento && data && hora && (
+              <div className="rounded-lg border border-primary/30 bg-primary/[0.03] p-3 text-sm text-muted-foreground">
+                Esse é o mesmo horário do seu último agendamento:{" "}
+                <strong className="text-foreground">
+                  {formatarDataExibicao(data)} às {hora}
+                </strong>
+                . Não é esse horário? Toque em "Voltar" pra escolher outro.
+              </div>
+            )}
+            <DadosClienteForm
+              enviando={enviando}
+              erro={erro}
+              mostrarLinkReferencia={estabelecimento?.segmento === "tatuagem"}
+              nomeInicial={searchParams.get("nome") ?? undefined}
+              telefoneInicial={searchParams.get("telefone") ?? undefined}
+              onSubmit={handleConfirmar}
+            />
+          </div>
         )}
 
         {etapa === "confirmacao" && agendamento && (

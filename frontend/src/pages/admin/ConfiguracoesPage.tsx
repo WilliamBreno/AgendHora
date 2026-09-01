@@ -8,6 +8,7 @@ import { LogoUploadField } from "@/components/configuracoes/LogoUploadField"
 import { WhatsAppIntegracaoCard } from "@/components/configuracoes/WhatsAppIntegracaoCard"
 import { AvisoEditor } from "@/components/configuracoes/AvisoEditor"
 import { DescontoProfissionalEditor } from "@/components/configuracoes/DescontoProfissionalEditor"
+import { DiasReagendamentoEditor } from "@/components/configuracoes/DiasReagendamentoEditor"
 import { MeuPlanoCard } from "@/components/configuracoes/MeuPlanoCard"
 import { Button } from "@/components/ui/button"
 
@@ -23,6 +24,7 @@ export function ConfiguracoesPage() {
     renovar,
     verificarRenovacao,
     atualizarDescontoProfissional,
+    atualizarDiasReagendamento,
   } = useEstabelecimento()
 
   const linkPublico = estabelecimento ? `${window.location.origin}/${estabelecimento.slug}` : ""
@@ -139,6 +141,23 @@ export function ConfiguracoesPage() {
             <DescontoProfissionalEditor
               percentual={estabelecimento.desconto_profissional_percentual}
               onAtualizar={atualizarDescontoProfissional}
+            />
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="font-heading font-medium">Reagendamento automático</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Avisa por e-mail quem sumiu, sugerindo um novo horário.
+        </p>
+        <div className="mt-4">
+          {loading || !estabelecimento ? (
+            <p className="text-sm text-muted-foreground">Carregando...</p>
+          ) : (
+            <DiasReagendamentoEditor
+              dias={estabelecimento.dias_reagendamento}
+              onAtualizar={atualizarDiasReagendamento}
             />
           )}
         </div>

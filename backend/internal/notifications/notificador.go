@@ -93,6 +93,40 @@ func (n *Notificador) NotificarLembrete(estabelecimento models.Estabelecimento, 
 	)
 }
 
+// NotificarLembreteFinal é o segundo lembrete, 30 minutos antes do horário
+// (ver internal/lembretes) — além do lembrete de algumas horas antes, não no
+// lugar dele.
+func (n *Notificador) NotificarLembreteFinal(estabelecimento models.Estabelecimento, agendamento models.Agendamento) {
+	if n == nil || agendamento.Cliente.Email == "" {
+		return
+	}
+	dataFormatada := agendamento.Data.Format("02/01/2006")
+	n.enviar(
+		agendamento.Cliente.Email,
+		"Seu horário é daqui a 30 minutos — "+estabelecimento.Nome,
+		emailLembreteFinalHTML(estabelecimento, agendamento, dataFormatada),
+	)
+}
+
+// NotificarReagendamento é o aviso automático de inatividade (ver
+// internal/reagendamento) — sugestaoTexto vazio significa que não achou o
+// mesmo horário livre de novo, e o e-mail cai num CTA genérico de agendar.
+func (n *Notificador) NotificarReagendamento(
+	estabelecimento models.Estabelecimento,
+	cliente models.Cliente,
+	diasSemAgendar int,
+	link, sugestaoTexto string,
+) {
+	if n == nil || cliente.Email == "" {
+		return
+	}
+	n.enviar(
+		cliente.Email,
+		"Faz tempo que a gente não te vê — "+estabelecimento.Nome,
+		emailReagendamentoHTML(estabelecimento, cliente, diasSemAgendar, link, sugestaoTexto),
+	)
+}
+
 // NotificarConviteProfissional manda o link de cadastro pro profissional
 // auxiliar recém-convidado pelo dono. link já vem pronto (ver
 // handlers.ProfissionalHandler, que também devolve esse mesmo link na

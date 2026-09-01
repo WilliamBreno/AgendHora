@@ -21,6 +21,12 @@ type Cliente struct {
 	DataNascimento    *time.Time `gorm:"type:date" json:"data_nascimento"`
 	EstabelecimentoID uint       `gorm:"not null;index" json:"estabelecimento_id"`
 
+	// UltimoAvisoReagendamentoEm marca quando o e-mail automático de
+	// reagendamento (ver internal/reagendamento) foi enviado pra esse
+	// cliente — evita reenviar todo dia enquanto ele continuar inativo;
+	// só dispara de novo se ele agendar de novo e sumir mais uma vez.
+	UltimoAvisoReagendamentoEm *time.Time `json:"-"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

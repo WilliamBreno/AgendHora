@@ -676,7 +676,7 @@ func duracaoMediaMinutos(agendamentos []models.Agendamento) float64 {
 	}
 	var soma int
 	for _, a := range agendamentos {
-		soma += a.Servico.DuracaoMin
+		soma += a.Servico.DuracaoEfetivaMin()
 	}
 	return float64(soma) / float64(len(agendamentos))
 }
@@ -703,7 +703,7 @@ func ocupacaoNoPeriodo(agendamentos []models.Agendamento, horarios models.Horari
 		if a.Data.Before(inicio) || a.Data.After(fim) {
 			continue
 		}
-		ocupado += float64(a.Servico.DuracaoMin)
+		ocupado += float64(a.Servico.DuracaoEfetivaMin())
 	}
 	return disponivel, ocupado
 }
@@ -736,6 +736,73 @@ func diaComMaiorQueda(agendamentos []models.Agendamento, inicioAtual, inicioPass
 
 func diasDesde(referencia, data time.Time) int {
 	return int(data.Sub(referencia).Hours() / 24)
+}
+
+// servicoParaPromover aponta, entre os serviços com agendamento no
+// intervalo, aquele com a procura mais fraca em relação aos demais — pensado
+// pra funcionar tanto na visão do estabelecimento inteiro quanto na de um
+// profissional específico (os agendamentos já vêm filtrados por quem chama,
+// ver aplicarFiltroProfissional), o que já entrega a "análise entre cada
+// profissional e ele mesmo como dono" pedida: basta olhar o dashboard com um
+// profissional selecionado no filtro que já existe.
+//
+// Só sugere quando:
+//   - há pelo menos 2 serviços diferentes com agendamento no período (com 1
+//     só não há com o que comparar);
+//   - o mais fraco não empata com o mais forte (evita "sugerir" quando todo
+//     mundo tem a mesma quantidade, o que não é fraqueza nenhuma);
+//   - a diferença é grande o bastante pra não ser só ruído — menos de 60% da
+//     média dos OUTROS serviços (excluindo o próprio fraco da média, senão
+//     ele puxaria a própria comparação pra baixo).
+//
+// nomeTop é o serviço com mais procura no mesmo período — usado como
+// sugestão concreta de combo/pacote, não é feito só de texto genérico.
+func servicoParaPromover(agendamentos []models.Agendamento, inicio, fim time.Time) (nomeFraco string, qtdFraco int, mediaOutros float64, nomeTop string, ok bool) {
+	porServico := map[uint]int{}
+	nomePorServico := map[uint]string{}
+	for _, a := range agendamentos {
+		if a.Data.Before(inicio) || a.Data.After(fim) {
+			continue
+		}
+		porServico[a.ServicoID]++
+		nomePorServico[a.ServicoID] = a.Servico.Nome
+	}
+	if len(porServico) < 2 {
+		return "", 0, 0, "", false
+	}
+
+	var idFraco, idTop uint
+	qtdTop, qtdFracoAtual := -1, -1
+	for id, qtd := range porServico {
+		if qtdTop == -1 || qtd > qtdTop {
+			qtdTop, idTop = qtd, id
+		}
+		if qtdFracoAtual == -1 || qtd < qtdFracoAtual {
+			qtdFracoAtual, idFraco = qtd, id
+		}
+	}
+	if idFraco == idTop {
+		// todo mundo com a mesma quantidade — não há "fraco" de verdade.
+		return "", 0, 0, "", false
+	}
+
+	var somaOutros, count int
+	for id, qtd := range porServico {
+		if id == idFraco {
+			continue
+		}
+		somaOutros += qtd
+		count++
+	}
+	if count == 0 {
+		return "", 0, 0, "", false
+	}
+	media := float64(somaOutros) / float64(count)
+	if media <= 0 || float64(qtdFracoAtual) >= media*0.6 {
+		return "", 0, 0, "", false
+	}
+
+	return nomePorServico[idFraco], qtdFracoAtual, media, nomePorServico[idTop], true
 }
 
 // gerarSugestoes aplica regras determinísticas sobre os dados reais do
@@ -803,7 +870,35 @@ func gerarSugestoes(agendamentos []models.Agendamento, horarios models.HorarioFu
 		}
 	}
 
-	if len(sugestoes) == 0 {
+	// serviço com procura fraca: soa como alerta quando já existe outro
+	// alerta nessa mesma passada (o estabelecimento já não está indo bem,
+	// então é mais um ponto de atenção); soa como oportunidade quando o
+	// resto está indo bem — nunca em tom de cobrança nesse caso (ver
+	// CLAUDE.md "Motor de sugestões de faturamento").
+	haAlerta := len(sugestoes) > 0
+	if nomeFraco, qtdFraco, mediaOutros, nomeTop, ok := servicoParaPromover(agendamentos, inicioMes, hoje); ok {
+		if haAlerta {
+			sugestoes = append(sugestoes, sugestao{
+				Tipo:   "alerta",
+				Titulo: "Um serviço está com procura baixa",
+				Descricao: fmt.Sprintf(
+					"\"%s\" teve %d agendamento(s) esse mês, bem abaixo da média de %.0f dos outros serviços. Considere uma promoção por tempo limitado nele, ou um combo junto com \"%s\" (seu serviço mais procurado) pra apresentar o serviço fraco a quem já vem pelo popular.",
+					nomeFraco, qtdFraco, mediaOutros, nomeTop,
+				),
+			})
+		} else {
+			sugestoes = append(sugestoes, sugestao{
+				Tipo:   "incentivo",
+				Titulo: "Oportunidade de crescer ainda mais",
+				Descricao: fmt.Sprintf(
+					"\"%s\" teve %d agendamento(s) esse mês, contra uma média de %.0f dos outros serviços — ainda tem espaço pra crescer. Um combo com \"%s\" (seu mais procurado) ou uma promoção por tempo limitado pode ajudar a apresentá-lo pra mais gente.",
+					nomeFraco, qtdFraco, mediaOutros, nomeTop,
+				),
+			})
+		}
+	}
+
+	if !haAlerta {
 		if minutosDisponiveis > 0 && duracaoMedia > 0 {
 			potencialTeto := (minutosDisponiveis / duracaoMedia) * ticketMedio
 			sugestoes = append(sugestoes, sugestao{

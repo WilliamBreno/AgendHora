@@ -16,10 +16,15 @@ import (
 
 const (
 	// intervaloVerificacao é de quanto em quanto tempo o laço acorda pra
-	// checar se algum agendamento entrou na janela de antecedência.
+	// checar se algum agendamento entrou em alguma das janelas de
+	// antecedência abaixo.
 	intervaloVerificacao = 15 * time.Minute
-	// antecedencia é quanto tempo antes do horário marcado o lembrete sai.
+	// antecedencia é quanto tempo antes do horário marcado o primeiro
+	// lembrete sai.
 	antecedencia = 3 * time.Hour
+	// antecedenciaFinal é o segundo lembrete, bem mais próximo do horário —
+	// além do primeiro, não no lugar dele (ver models.Agendamento.LembreteFinalEnviado).
+	antecedenciaFinal = 30 * time.Minute
 )
 
 // Iniciar sobe o laço de verificação numa goroutine e retorna na hora —
@@ -40,8 +45,25 @@ func Iniciar(db *gorm.DB, notificador *notifications.Notificador) {
 
 // Verificar roda uma única passada da checagem — exportado à parte de
 // Iniciar pra poder ser disparado sob demanda (ex: script de teste), sem
-// precisar esperar o laço real.
+// precisar esperar o laço real. São duas janelas independentes (3h e 30min
+// antes), cada uma com seu próprio controle de duplicidade — um agendamento
+// recebe os dois lembretes, não um no lugar do outro.
 func Verificar(db *gorm.DB, notificador *notifications.Notificador) {
+	verificarJanela(db, notificador, "lembrete_enviado", antecedencia, notificador.NotificarLembrete)
+	verificarJanela(db, notificador, "lembrete_final_enviado", antecedenciaFinal, notificador.NotificarLembreteFinal)
+}
+
+// verificarJanela busca agendamentos confirmados que ainda não receberam o
+// lembrete marcado por `campoEnviado` e cujo horário caiu dentro de
+// `antecedenciaJanela`, dispara o e-mail e marca o campo — mesma lógica pras
+// duas janelas de lembrete, só troca o campo de controle e a antecedência.
+func verificarJanela(
+	db *gorm.DB,
+	notificador *notifications.Notificador,
+	campoEnviado string,
+	antecedenciaJanela time.Duration,
+	notificar func(models.Estabelecimento, models.Agendamento),
+) {
 	agora := time.Now()
 	hoje := time.Date(agora.Year(), agora.Month(), agora.Day(), 0, 0, 0, 0, agora.Location())
 
@@ -49,11 +71,11 @@ func Verificar(db *gorm.DB, notificador *notifications.Notificador) {
 	err := db.
 		Preload("Cliente").
 		Preload("Servico").
-		Where("status = ? AND lembrete_enviado = ? AND data BETWEEN ? AND ?",
+		Where("status = ? AND "+campoEnviado+" = ? AND data BETWEEN ? AND ?",
 			models.StatusConfirmado, false, hoje, hoje.Add(48*time.Hour)).
 		Find(&candidatos).Error
 	if err != nil {
-		log.Printf("erro ao buscar agendamentos para lembrete: %v", err)
+		log.Printf("erro ao buscar agendamentos para lembrete (%s): %v", campoEnviado, err)
 		return
 	}
 
@@ -65,7 +87,7 @@ func Verificar(db *gorm.DB, notificador *notifications.Notificador) {
 		}
 
 		faltam := horario.Sub(agora)
-		if faltam <= 0 || faltam > antecedencia {
+		if faltam <= 0 || faltam > antecedenciaJanela {
 			continue
 		}
 
@@ -79,11 +101,11 @@ func Verificar(db *gorm.DB, notificador *notifications.Notificador) {
 			continue
 		}
 
-		notificador.NotificarLembrete(estabelecimento, agendamento)
+		notificar(estabelecimento, agendamento)
 
 		if err := db.Model(&models.Agendamento{}).Where("id = ?", agendamento.ID).
-			Update("lembrete_enviado", true).Error; err != nil {
-			log.Printf("erro ao marcar lembrete enviado (agendamento %d): %v", agendamento.ID, err)
+			Update(campoEnviado, true).Error; err != nil {
+			log.Printf("erro ao marcar %s (agendamento %d): %v", campoEnviado, agendamento.ID, err)
 		}
 	}
 }
