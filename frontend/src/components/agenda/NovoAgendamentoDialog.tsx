@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react"
-import { ChevronDown } from "lucide-react"
+import { Check, ChevronDown } from "lucide-react"
 import { toast } from "sonner"
 import {
   Dialog,
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
 import { DatePickerPopover } from "@/components/public/DatePickerPopover"
 import { HoraInput } from "@/components/common/HoraInput"
 import {
@@ -25,7 +26,13 @@ import {
 import { useAuth } from "@/contexts/AuthContext"
 import { ApiError } from "@/lib/api"
 import { cn } from "@/lib/utils"
-import { formatarDuracaoServico } from "@/lib/formatacao"
+import {
+  duracaoEfetivaMin,
+  formatarDuracao,
+  formatarDuracaoServico,
+  formatarPrecoTotalServicos,
+  servicosCompativeis,
+} from "@/lib/formatacao"
 import type { AgendamentoInput, ConflitoAgendamento, Servico, Usuario } from "@/types"
 
 interface NovoAgendamentoDialogProps {
@@ -77,18 +84,48 @@ export function NovoAgendamentoDialog({
   // em vez de só bloquear, mostra com quem/o quê e oferece a opção de
   // encaixar mesmo assim ou escolher outro horário.
   const [conflito, setConflito] = useState<ConflitoAgendamento | null>(null)
+  // multiServicoAtivo/adicionais (ver CLAUDE.md "Agendamento com mais de um
+  // serviço") — mesmo recurso da página pública, agora também disponível
+  // pra quem cria o agendamento manualmente pelo painel.
+  const [multiServicoAtivo, setMultiServicoAtivo] = useState(false)
+  const [adicionais, setAdicionais] = useState<Servico[]>([])
 
   function resetar() {
     setForm({ ...FORM_VAZIO, profissional_id: exigeEscolhaProfissional ? 0 : profissionalUnico })
     setErro(null)
     setConflito(null)
     setMaisOpcoesAberto(destaqueFinanceiro)
+    setMultiServicoAtivo(false)
+    setAdicionais([])
   }
 
   useEffect(() => {
     if (open) resetar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
+
+  const servicoPrincipal = servicos.find((s) => s.id === form.servico_id) ?? null
+  const todosSelecionados = servicoPrincipal ? [servicoPrincipal, ...adicionais] : adicionais
+  // lista de opções pra "adicionar mais um" — só o que é compatível com o
+  // que já está selecionado (mesma regra da página pública: um serviço
+  // individual só combina com o catálogo geral ou com outro individual do
+  // MESMO profissional).
+  const adicionaisDisponiveis = servicoPrincipal
+    ? servicosCompativeis(servicos, todosSelecionados).filter((s) => s.id !== servicoPrincipal.id)
+    : []
+  // um serviço individual no combo já define o profissional sozinho — nesse
+  // caso o campo de profissional deixa de ser uma escolha livre, igual
+  // acontece na página pública.
+  const profissionalExigido: number | undefined = todosSelecionados.find(
+    (s) => s.profissional_id !== null
+  )?.profissional_id ?? undefined
+
+  useEffect(() => {
+    if (profissionalExigido !== undefined && form.profissional_id !== profissionalExigido) {
+      atualizarCampo("profissional_id", profissionalExigido)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profissionalExigido])
 
   function atualizarCampo<K extends keyof AgendamentoInput>(campo: K, valor: AgendamentoInput[K]) {
     setForm((f) => ({ ...f, [campo]: valor }))
@@ -98,11 +135,38 @@ export function NovoAgendamentoDialog({
     setErro(null)
   }
 
+  function selecionarPrincipal(id: number) {
+    atualizarCampo("servico_id", id)
+    // trocar o serviço principal pode invalidar as combinações já marcadas
+    // (um individual de outro profissional, por exemplo) — mais simples e
+    // previsível recomeçar a lista de adicionais do que tentar podar.
+    setAdicionais([])
+  }
+
+  function alternarAdicional(servico: Servico) {
+    setAdicionais((atual) =>
+      atual.some((s) => s.id === servico.id)
+        ? atual.filter((s) => s.id !== servico.id)
+        : [...atual, servico]
+    )
+    setConflito(null)
+    setErro(null)
+  }
+
+  function alternarModoMultiplo(ativo: boolean) {
+    setMultiServicoAtivo(ativo)
+    setAdicionais([])
+  }
+
   async function submeter(forcarEncaixe: boolean) {
     setErro(null)
     setSalvando(true)
     try {
-      await onCriar({ ...form, encaixe: forcarEncaixe })
+      await onCriar({
+        ...form,
+        servicos_adicionais_ids: adicionais.map((s) => s.id),
+        encaixe: forcarEncaixe,
+      })
       toast.success(forcarEncaixe ? "Agendamento encaixado." : "Agendamento criado.")
       resetar()
       onOpenChange(false)
@@ -185,7 +249,7 @@ export function NovoAgendamentoDialog({
               <Label>Serviço</Label>
               <Select
                 value={form.servico_id ? String(form.servico_id) : ""}
-                onValueChange={(value) => atualizarCampo("servico_id", Number(value))}
+                onValueChange={(value) => selecionarPrincipal(Number(value))}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Selecione um serviço">
@@ -207,30 +271,102 @@ export function NovoAgendamentoDialog({
               </Select>
             </div>
 
-            {exigeEscolhaProfissional && (
-              <div className="grid gap-1.5">
-                <Label>Profissional</Label>
-                <Select
-                  value={form.profissional_id ? String(form.profissional_id) : ""}
-                  onValueChange={(value) => atualizarCampo("profissional_id", Number(value))}
+            {servicoPrincipal && (
+              <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
+                <label
+                  htmlFor="multi-servico-admin"
+                  className="flex items-center justify-between gap-3 text-sm text-muted-foreground"
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Selecione o profissional">
-                      {(value: string | null) => {
-                        const profissional = profissionais.find((p) => String(p.id) === value)
-                        return profissional ? profissional.nome : null
-                      }}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {profissionais.map((p) => (
-                      <SelectItem key={p.id} value={String(p.id)}>
-                        {p.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  Agendar mais de um serviço nesse horário
+                  <Switch
+                    id="multi-servico-admin"
+                    checked={multiServicoAtivo}
+                    onCheckedChange={alternarModoMultiplo}
+                  />
+                </label>
+
+                {multiServicoAtivo && (
+                  <div className="flex flex-col gap-2">
+                    {adicionaisDisponiveis.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Nenhum outro serviço combina com "{servicoPrincipal.nome}".
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-1.5">
+                        {adicionaisDisponiveis.map((s) => {
+                          const selecionado = adicionais.some((a) => a.id === s.id)
+                          return (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() => alternarAdicional(s)}
+                              className={cn(
+                                "flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-left text-sm transition-colors",
+                                selecionado
+                                  ? "border-primary bg-primary/[0.05]"
+                                  : "border-input hover:bg-muted/50"
+                              )}
+                            >
+                              <span>
+                                {s.nome} ·{" "}
+                                <span className="text-muted-foreground">
+                                  {formatarDuracaoServico(s.duracao_min, s.duracao_max_min)}
+                                </span>
+                              </span>
+                              {selecionado && <Check className="size-4 shrink-0 text-primary" />}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {adicionais.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        {todosSelecionados.map((s) => s.nome).join(" + ")} ·{" "}
+                        {formatarDuracao(
+                          todosSelecionados.reduce((soma, s) => soma + duracaoEfetivaMin(s), 0)
+                        )}{" "}
+                        · {formatarPrecoTotalServicos(todosSelecionados)}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
+            )}
+
+            {profissionalExigido !== undefined ? (
+              <p className="text-sm text-muted-foreground">
+                Profissional:{" "}
+                <span className="font-medium text-foreground">
+                  {profissionais.find((p) => p.id === profissionalExigido)?.nome ?? usuario?.nome}
+                </span>
+              </p>
+            ) : (
+              exigeEscolhaProfissional && (
+                <div className="grid gap-1.5">
+                  <Label>Profissional</Label>
+                  <Select
+                    value={form.profissional_id ? String(form.profissional_id) : ""}
+                    onValueChange={(value) => atualizarCampo("profissional_id", Number(value))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Selecione o profissional">
+                        {(value: string | null) => {
+                          const profissional = profissionais.find((p) => String(p.id) === value)
+                          return profissional ? profissional.nome : null
+                        }}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {profissionais.map((p) => (
+                        <SelectItem key={p.id} value={String(p.id)}>
+                          {p.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )
             )}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

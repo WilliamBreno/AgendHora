@@ -63,6 +63,21 @@ export function nomesServicos(servicos: { nome: string }[]) {
   return servicos.map((s) => s.nome).join(" + ")
 }
 
+// servicosCompativeis filtra a lista pra só mostrar o que pode ser
+// combinado com o que já foi escolhido — um serviço individual (ver
+// CLAUDE.md "Serviços individuais") só combina com o catálogo geral e com
+// outros serviços individuais do MESMO profissional; nunca com o de um
+// colega, senão o combo ficaria impossível de atender num horário só.
+// Usada tanto na página pública quanto no "Novo agendamento" do admin.
+export function servicosCompativeis<T extends { id: number; profissional_id: number | null }>(
+  servicos: T[],
+  selecionados: T[]
+): T[] {
+  const profissionalExigido = selecionados.find((s) => s.profissional_id !== null)?.profissional_id
+  if (profissionalExigido === undefined) return servicos
+  return servicos.filter((s) => s.profissional_id === null || s.profissional_id === profissionalExigido)
+}
+
 export function formatarDataExibicao(data: string) {
   const [ano, mes, dia] = data.split("-").map(Number)
   const texto = new Date(ano, mes - 1, dia).toLocaleDateString("pt-BR", {

@@ -21,6 +21,7 @@ import {
   formatarDataExibicao,
   formatarDuracao,
   formatarPrecoTotalServicos,
+  servicosCompativeis,
 } from "@/lib/formatacao"
 import type { Agendamento, ProfissionalPublico, Servico } from "@/types"
 
@@ -36,17 +37,6 @@ const TITULO_ETAPA: Partial<Record<Etapa, string>> = {
   profissional: "Escolha o profissional",
   horario: "Escolha a data e o horário",
   dados: "Seus dados",
-}
-
-// servicosCompativeis filtra a lista pra só mostrar o que pode ser
-// combinado com o que já foi escolhido — um serviço individual (ver
-// CLAUDE.md "Serviços individuais") só combina com o catálogo geral e com
-// outros serviços individuais do MESMO profissional; nunca com o de um
-// colega, senão o combo ficaria impossível de atender num horário só.
-function servicosCompativeis(servicos: Servico[], selecionados: Servico[]): Servico[] {
-  const profissionalExigido = selecionados.find((s) => s.profissional_id !== null)?.profissional_id
-  if (profissionalExigido === undefined) return servicos
-  return servicos.filter((s) => s.profissional_id === null || s.profissional_id === profissionalExigido)
 }
 
 export function AgendarPage() {
