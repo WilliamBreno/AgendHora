@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom"
 import { ChevronLeft } from "lucide-react"
 import gsap from "gsap"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
 import { ServicoSelecao } from "@/components/public/ServicoSelecao"
 import { ProfissionalSelecao } from "@/components/public/ProfissionalSelecao"
 import { HorarioSelecao } from "@/components/public/HorarioSelecao"
@@ -311,14 +312,16 @@ export function AgendarPage() {
             </p>
           ) : (
             <div className="flex flex-col gap-4">
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                <input
-                  type="checkbox"
-                  checked={multiServicoAtivo}
-                  onChange={(e) => alternarModoMultiplo(e.target.checked)}
-                  className="size-4 rounded border-input accent-primary"
-                />
+              <label
+                htmlFor="multi-servico"
+                className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm text-muted-foreground"
+              >
                 Quero agendar mais de um serviço nesse horário
+                <Switch
+                  id="multi-servico"
+                  checked={multiServicoAtivo}
+                  onCheckedChange={alternarModoMultiplo}
+                />
               </label>
 
               <ServicoSelecao
