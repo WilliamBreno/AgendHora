@@ -12,6 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { BuscaInput } from "@/components/common/BuscaInput"
 import { ProdutoCard } from "@/components/produtos/ProdutoCard"
 import { ProdutoFormDialog } from "@/components/produtos/ProdutoFormDialog"
 import { VendaProdutoDialog } from "@/components/produtos/VendaProdutoDialog"
@@ -22,6 +23,7 @@ import { useEquipe } from "@/hooks/useEquipe"
 import { useEstabelecimento } from "@/hooks/useEstabelecimento"
 import { useAuth } from "@/contexts/AuthContext"
 import { ApiError } from "@/lib/api"
+import { normalizarTexto } from "@/lib/utils"
 import type { Produto, ProdutoInput, VendaProdutoInput } from "@/types"
 
 export function ProdutosPage() {
@@ -40,10 +42,15 @@ export function ProdutosPage() {
   const [vendaAberta, setVendaAberta] = useState(false)
   const [produtoParaVender, setProdutoParaVender] = useState<Produto | null>(null)
   const [importarAberto, setImportarAberto] = useState(false)
+  const [busca, setBusca] = useState("")
 
   const produtosComEstoqueBaixo = produtos.filter(
     (p) => p.ativo && p.estoque_minimo > 0 && p.quantidade_estoque <= p.estoque_minimo
   )
+
+  const produtosFiltrados = busca.trim()
+    ? produtos.filter((p) => normalizarTexto(p.nome).includes(normalizarTexto(busca)))
+    : produtos
 
   function abrirNovo() {
     setProdutoEmEdicao(null)
@@ -142,6 +149,15 @@ export function ProdutosPage() {
         </div>
       )}
 
+      {produtos.length > 0 && (
+        <BuscaInput
+          value={busca}
+          onChange={setBusca}
+          placeholder="Buscar produto pelo nome..."
+          className="sm:max-w-xs"
+        />
+      )}
+
       {loading ? (
         <p className="text-sm text-muted-foreground">Carregando...</p>
       ) : produtos.length === 0 ? (
@@ -158,9 +174,13 @@ export function ProdutosPage() {
             Novo produto
           </Button>
         </div>
+      ) : produtosFiltrados.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          Nenhum produto encontrado para "{busca}".
+        </p>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {produtos.map((produto) => (
+          {produtosFiltrados.map((produto) => (
             <ProdutoCard
               key={produto.id}
               produto={produto}

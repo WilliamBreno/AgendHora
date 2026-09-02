@@ -12,6 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { BuscaInput } from "@/components/common/BuscaInput"
 import { ServicoCard } from "@/components/servicos/ServicoCard"
 import { ServicoFormDialog } from "@/components/servicos/ServicoFormDialog"
 import { useServicos } from "@/hooks/useServicos"
@@ -19,6 +20,7 @@ import { useEstabelecimento } from "@/hooks/useEstabelecimento"
 import { useEquipe } from "@/hooks/useEquipe"
 import { useAuth } from "@/contexts/AuthContext"
 import { ApiError } from "@/lib/api"
+import { normalizarTexto } from "@/lib/utils"
 import type { Servico, ServicoInput } from "@/types"
 
 export function ServicosPage() {
@@ -32,6 +34,11 @@ export function ServicosPage() {
   const [servicoEmEdicao, setServicoEmEdicao] = useState<Servico | null>(null)
   const [servicoParaExcluir, setServicoParaExcluir] = useState<Servico | null>(null)
   const [excluindo, setExcluindo] = useState(false)
+  const [busca, setBusca] = useState("")
+
+  const servicosFiltrados = busca.trim()
+    ? servicos.filter((s) => normalizarTexto(s.nome).includes(normalizarTexto(busca)))
+    : servicos
 
   function abrirNovo() {
     setServicoEmEdicao(null)
@@ -87,6 +94,15 @@ export function ServicosPage() {
         </Button>
       </div>
 
+      {servicos.length > 0 && (
+        <BuscaInput
+          value={busca}
+          onChange={setBusca}
+          placeholder="Buscar serviço pelo nome..."
+          className="sm:max-w-xs"
+        />
+      )}
+
       {loading ? (
         <p className="text-sm text-muted-foreground">Carregando...</p>
       ) : servicos.length === 0 ? (
@@ -103,9 +119,13 @@ export function ServicosPage() {
             Novo serviço
           </Button>
         </div>
+      ) : servicosFiltrados.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          Nenhum serviço encontrado para "{busca}".
+        </p>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {servicos.map((servico) => (
+          {servicosFiltrados.map((servico) => (
             <ServicoCard
               key={servico.id}
               servico={servico}
