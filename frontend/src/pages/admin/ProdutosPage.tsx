@@ -16,15 +16,24 @@ import { BuscaInput } from "@/components/common/BuscaInput"
 import { ProdutoCard } from "@/components/produtos/ProdutoCard"
 import { ProdutoFormDialog } from "@/components/produtos/ProdutoFormDialog"
 import { VendaProdutoDialog } from "@/components/produtos/VendaProdutoDialog"
+import { VendasHistorico } from "@/components/produtos/VendasHistorico"
 import { ImportarProdutosDialog } from "@/components/produtos/ImportarProdutosDialog"
 import { useProdutos } from "@/hooks/useProdutos"
 import { useVendasProdutos } from "@/hooks/useVendasProdutos"
 import { useEquipe } from "@/hooks/useEquipe"
 import { useEstabelecimento } from "@/hooks/useEstabelecimento"
+import { useClientes } from "@/hooks/useClientes"
 import { useAuth } from "@/contexts/AuthContext"
 import { ApiError } from "@/lib/api"
-import { normalizarTexto } from "@/lib/utils"
+import { cn, normalizarTexto } from "@/lib/utils"
 import type { Produto, ProdutoInput, VendaProdutoInput } from "@/types"
+
+type Aba = "catalogo" | "vendas"
+
+const ABAS: { valor: Aba; label: string }[] = [
+  { valor: "catalogo", label: "Catálogo" },
+  { valor: "vendas", label: "Vendas" },
+]
 
 export function ProdutosPage() {
   const { ehDono, usuario } = useAuth()
@@ -33,8 +42,10 @@ export function ProdutosPage() {
   const { registrar } = useVendasProdutos()
   const { equipe } = useEquipe(ehDono)
   const { estabelecimento } = useEstabelecimento()
+  const { clientes } = useClientes()
   const profissionais = equipe?.profissionais ?? []
 
+  const [aba, setAba] = useState<Aba>("catalogo")
   const [formAberto, setFormAberto] = useState(false)
   const [produtoEmEdicao, setProdutoEmEdicao] = useState<Produto | null>(null)
   const [produtoParaExcluir, setProdutoParaExcluir] = useState<Produto | null>(null)
@@ -143,54 +154,78 @@ export function ProdutosPage() {
         </div>
       </div>
 
-      {produtosComEstoqueBaixo.length > 0 && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-          Estoque baixo: {produtosComEstoqueBaixo.map((p) => p.nome).join(", ")}.
-        </div>
-      )}
+      <div className="flex gap-2 border-b border-border">
+        {ABAS.map((a) => (
+          <button
+            key={a.valor}
+            type="button"
+            onClick={() => setAba(a.valor)}
+            className={cn(
+              "-mb-px border-b-2 px-1 pb-2 text-sm font-medium transition-colors",
+              aba === a.valor
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {a.label}
+          </button>
+        ))}
+      </div>
 
-      {produtos.length > 0 && (
-        <BuscaInput
-          value={busca}
-          onChange={setBusca}
-          placeholder="Buscar produto pelo nome..."
-          className="sm:max-w-xs"
-        />
-      )}
-
-      {loading ? (
-        <p className="text-sm text-muted-foreground">Carregando...</p>
-      ) : produtos.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border py-16 text-center">
-          <Package className="size-8 text-muted-foreground" />
-          <div>
-            <p className="font-medium">Nenhum produto cadastrado</p>
-            <p className="text-sm text-muted-foreground">
-              Cadastre produtos pra vender aos clientes ou controlar o uso interno da equipe.
-            </p>
-          </div>
-          <Button onClick={abrirNovo} variant="outline">
-            <Plus className="size-4" />
-            Novo produto
-          </Button>
-        </div>
-      ) : produtosFiltrados.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          Nenhum produto encontrado para "{busca}".
-        </p>
+      {aba === "vendas" ? (
+        <VendasHistorico />
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {produtosFiltrados.map((produto) => (
-            <ProdutoCard
-              key={produto.id}
-              produto={produto}
-              onEdit={() => abrirEdicao(produto)}
-              onVender={() => abrirVenda(produto)}
-              onDelete={() => setProdutoParaExcluir(produto)}
-              onToggleAtivo={() => alternarAtivo(produto)}
+        <>
+          {produtosComEstoqueBaixo.length > 0 && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+              Estoque baixo: {produtosComEstoqueBaixo.map((p) => p.nome).join(", ")}.
+            </div>
+          )}
+
+          {produtos.length > 0 && (
+            <BuscaInput
+              value={busca}
+              onChange={setBusca}
+              placeholder="Buscar produto pelo nome..."
+              className="sm:max-w-xs"
             />
-          ))}
-        </div>
+          )}
+
+          {loading ? (
+            <p className="text-sm text-muted-foreground">Carregando...</p>
+          ) : produtos.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border py-16 text-center">
+              <Package className="size-8 text-muted-foreground" />
+              <div>
+                <p className="font-medium">Nenhum produto cadastrado</p>
+                <p className="text-sm text-muted-foreground">
+                  Cadastre produtos pra vender aos clientes ou controlar o uso interno da equipe.
+                </p>
+              </div>
+              <Button onClick={abrirNovo} variant="outline">
+                <Plus className="size-4" />
+                Novo produto
+              </Button>
+            </div>
+          ) : produtosFiltrados.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Nenhum produto encontrado para "{busca}".
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {produtosFiltrados.map((produto) => (
+                <ProdutoCard
+                  key={produto.id}
+                  produto={produto}
+                  onEdit={() => abrirEdicao(produto)}
+                  onVender={() => abrirVenda(produto)}
+                  onDelete={() => setProdutoParaExcluir(produto)}
+                  onToggleAtivo={() => alternarAtivo(produto)}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       <ProdutoFormDialog
@@ -207,6 +242,7 @@ export function ProdutosPage() {
         profissionais={profissionais}
         usuarioAtualId={usuario?.id ?? 0}
         descontoPadrao={estabelecimento?.desconto_profissional_percentual ?? null}
+        clientes={clientes}
         produtoInicialId={produtoParaVender?.id}
         onSubmit={registrarVenda}
       />

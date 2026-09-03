@@ -15,6 +15,7 @@ import { useServicos } from "@/hooks/useServicos"
 import { useEquipe } from "@/hooks/useEquipe"
 import { useProdutos } from "@/hooks/useProdutos"
 import { useVendasProdutos } from "@/hooks/useVendasProdutos"
+import { useClientes } from "@/hooks/useClientes"
 import { useAuth } from "@/contexts/AuthContext"
 import {
   dataDeHoje,
@@ -85,6 +86,7 @@ export function AgendaPage() {
   const { servicos } = useServicos()
   const { produtos } = useProdutos()
   const { registrar: registrarVendaProduto } = useVendasProdutos()
+  const { clientes } = useClientes()
   const profissionais = equipe?.profissionais ?? []
 
   const agendamentosPorDia = useMemo(() => {
@@ -301,6 +303,7 @@ export function AgendaPage() {
         onOpenChange={setNovoAberto}
         servicos={servicos}
         profissionais={profissionais}
+        clientes={clientes}
         segmento={segmento}
         onCriar={criar}
       />

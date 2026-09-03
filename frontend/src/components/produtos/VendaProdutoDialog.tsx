@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { TelefoneInput } from "@/components/common/TelefoneInput"
+import { ClienteAutocomplete } from "@/components/common/ClienteAutocomplete"
 import {
   Select,
   SelectContent,
@@ -22,7 +23,7 @@ import {
 import { cn } from "@/lib/utils"
 import { formatarPreco } from "@/lib/formatacao"
 import { ApiError } from "@/lib/api"
-import type { Produto, TipoCompradorVenda, Usuario, VendaProdutoInput } from "@/types"
+import type { Cliente, Produto, TipoCompradorVenda, Usuario, VendaProdutoInput } from "@/types"
 
 interface AgendamentoContexto {
   id: number
@@ -39,6 +40,11 @@ interface VendaProdutoDialogProps {
   profissionais: Usuario[]
   usuarioAtualId: number
   descontoPadrao: number | null
+  // clientes já cadastrados — alimenta o autocompletar de nome (ver
+  // ClienteAutocomplete). Opcional: quando aberto de dentro de um
+  // agendamento, o campo de nome nem aparece (o cliente já vem do
+  // agendamento), então não há por que exigir a lista nesse caso.
+  clientes?: Cliente[]
   produtoInicialId?: number
   // presente quando aberto de dentro do painel de um agendamento — a venda
   // já nasce vinculada e usa o cliente do próprio agendamento (ver CLAUDE.md
@@ -69,6 +75,7 @@ export function VendaProdutoDialog({
   profissionais,
   usuarioAtualId,
   descontoPadrao,
+  clientes = [],
   produtoInicialId,
   agendamento,
   onSubmit,
@@ -236,10 +243,15 @@ export function VendaProdutoDialog({
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-1.5">
                   <Label htmlFor="cliente_nome">Nome do cliente</Label>
-                  <Input
+                  <ClienteAutocomplete
                     id="cliente_nome"
                     value={form.cliente_nome ?? ""}
-                    onChange={(e) => atualizarCampo("cliente_nome", e.target.value)}
+                    onChangeNome={(nome) => atualizarCampo("cliente_nome", nome)}
+                    onSelecionar={(cliente) => {
+                      atualizarCampo("cliente_nome", cliente.nome)
+                      atualizarCampo("cliente_telefone", cliente.telefone)
+                    }}
+                    clientes={clientes}
                   />
                 </div>
                 <div className="grid gap-1.5">

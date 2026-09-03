@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { DatePickerPopover } from "@/components/public/DatePickerPopover"
 import { HoraInput } from "@/components/common/HoraInput"
+import { ClienteAutocomplete } from "@/components/common/ClienteAutocomplete"
 import {
   Select,
   SelectContent,
@@ -33,13 +34,16 @@ import {
   formatarPrecoTotalServicos,
   servicosCompativeis,
 } from "@/lib/formatacao"
-import type { AgendamentoInput, ConflitoAgendamento, Servico, Usuario } from "@/types"
+import type { AgendamentoInput, Cliente, ConflitoAgendamento, Servico, Usuario } from "@/types"
 
 interface NovoAgendamentoDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   servicos: Servico[]
   profissionais: Usuario[]
+  // clientes já cadastrados — alimenta o autocompletar de nome (ver
+  // ClienteAutocomplete): digitou, achou, clicou, já preenche o telefone.
+  clientes: Cliente[]
   // segmento do estabelecimento (ver CLAUDE.md "Segmentos de negócio") —
   // "tatuagem" mostra sinal + link de referência já em destaque, em vez de
   // atrás de "mais opções".
@@ -66,6 +70,7 @@ export function NovoAgendamentoDialog({
   onOpenChange,
   servicos,
   profissionais,
+  clientes,
   segmento,
   onCriar,
 }: NovoAgendamentoDialogProps) {
@@ -229,10 +234,15 @@ export function NovoAgendamentoDialog({
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-1.5">
                 <Label htmlFor="cliente_nome">Nome do cliente</Label>
-                <Input
+                <ClienteAutocomplete
                   id="cliente_nome"
                   value={form.cliente_nome}
-                  onChange={(e) => atualizarCampo("cliente_nome", e.target.value)}
+                  onChangeNome={(nome) => atualizarCampo("cliente_nome", nome)}
+                  onSelecionar={(cliente) => {
+                    atualizarCampo("cliente_nome", cliente.nome)
+                    atualizarCampo("cliente_telefone", cliente.telefone)
+                  }}
+                  clientes={clientes}
                 />
               </div>
               <div className="grid gap-1.5">
