@@ -55,7 +55,7 @@ export function DataNascimentoInput({ value, onChange }: DataNascimentoInputProp
   }
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex flex-wrap items-center gap-1.5">
       <Select value={dia} onValueChange={(v) => atualizar(v ?? "", mes, ano)}>
         <SelectTrigger className="w-[4.5rem]">
           <SelectValue placeholder="Dia">{(v: string | null) => v || "Dia"}</SelectValue>

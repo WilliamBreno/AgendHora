@@ -38,7 +38,7 @@ export function ClienteHistoricoSheet({ cliente, onOpenChange }: ClienteHistoric
               </SheetDescription>
             </SheetHeader>
 
-            <div className="flex flex-col gap-3 px-4 pb-4">
+            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4">
               {loading ? (
                 <p className="text-sm text-muted-foreground">Carregando...</p>
               ) : agendamentos.length === 0 ? (

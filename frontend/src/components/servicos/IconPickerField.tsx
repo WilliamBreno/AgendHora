@@ -38,7 +38,7 @@ export function IconPickerField({ value, onChange, iconesDisponiveis }: IconPick
           </Button>
         }
       />
-      <PopoverContent className="w-64" align="start">
+      <PopoverContent className="w-72" align="start">
         <div className="grid grid-cols-6 gap-1">
           {iconesDisponiveis.map((nome) => (
             <button

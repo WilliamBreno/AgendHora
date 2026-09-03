@@ -60,7 +60,7 @@ export function DatePickerPopover({ value, onChange }: DatePickerPopoverProps) {
           </Button>
         }
       />
-      <PopoverContent className="w-72" align="start">
+      <PopoverContent className="w-80" align="start">
         <div className="flex items-center justify-between px-1 pb-2">
           <span className="text-sm font-medium">
             {MESES_PT[mes]} de {ano}
